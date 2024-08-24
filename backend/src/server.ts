@@ -3,12 +3,15 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './../routes/auth';
+import gameRoutes from './../routes/game';
 import { auth } from './../middlewares/authMiddleware';
 import User from './../models/User';
 
-
 interface AuthRequest extends Request {
-  user?: typeof User;
+  userDetails?:{
+    userId: string,
+    username: string;
+  }
 }
 
 dotenv.config();
@@ -22,12 +25,22 @@ mongoose.connect(process.env.MONGODB_URI as string)
 app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
+app.use('/api/game', gameRoutes);
 
-app.get('/api/protected', auth, (req: AuthRequest, res: Response) => {
-  // Access the user property here
-  res.json({ message: 'This is a protected route', user: req.user });
+app.get('/api/protected', auth, async (req: AuthRequest, res: Response) => {
+  console.log("At Protected Path!")
+  if (req.userDetails) {
+    console.log(req.userDetails.username);
+    const user = await User.findById(req.userDetails.userId).select('-password'); 
+    if (user) {
+      res.json({ message: 'This is a protected route', user });
+    } else {
+      res.status(404).json({ message: 'User not found' });
+    }
+  } else {
+    res.status(401).json({ message: 'Unauthorized' });
+  }
 });
-// Define routes here
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
