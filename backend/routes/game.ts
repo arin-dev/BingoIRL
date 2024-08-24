@@ -1,4 +1,6 @@
 import express, { Express, Request, Response, RequestHandler } from 'express';
+import { Types } from 'mongoose';
+
 import User from '../models/User';
 import {Game, playerGame} from './../models/gameModels';
 // import { v4 as uuidv4 } from 'uuid';
@@ -50,7 +52,7 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
         });
         try {
             await newPlayerGame.save();
-            res.json({message: "Game created successfully! "})
+            res.json({message: "Game created successfully! ", gameId : newGame._id})
         } catch (error) {
             // Delete the created game in case not able to attach creator to it.
             console.log(error);
@@ -66,47 +68,83 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
 });
   
 router.post('/register-for-game/:gameId', auth,  async (req : AuthRequest, res : Response) => {
+    // Handle the case when player is already registered for the game.
     try {
         console.log(" Here at the Patching factory to update BINGO! ")
-        let reqPlayerGame = await playerGame.findOne({game : req.params.gameId});
+        const gameId = req.params.gameId;
+        const game = await Game.findById(gameId);
         const {data} = req.body;
-        const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
-        data.forEach((entry: {rowIndex: number, colIndex: number, text: any}) => {
-            console.log(" Entry : ", entry, typeof entry.rowIndex);
-            // const colArray: Array<{ text: string; tick: boolean; }> = reqPlayerGame!.entries[entry.rowIndex] as unknown as Array<{ text: string; tick: boolean; }>;
-            entries![entry.rowIndex][entry.colIndex].text = entry.text;
+        // const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
+        const entries = data.map((row: any )=>
+            row.map((text: String) => ({
+                text: text,
+                tick: false 
+            }))
+        );
+        const reqPlayerGame = new playerGame({
+            gameSize : game?.gameSize,
+            player : req.userDetails?.userId,
+            game : gameId,
+            entries : entries,
         })
+        
         reqPlayerGame?.save();
-        reqPlayerGame = await playerGame.findOne({game : req.params.gameId});
+
+        const player = await User.findById(req.userDetails?.userId).select('-password');
+        
+        player?.currentGames.push(new Types.ObjectId(gameId));
+        player?.save();
+
+        game?.registeredPlayers.push(player!._id)
+        game?.save();
+
         console.log("Updated reqPlayerGame : ", reqPlayerGame)
-        res.json({message: "Entry updated Successfully! "})
+        res.json({message: "Registration Successful! "})
     } catch (error) {
-        res.status(400).json({ error: 'Error updating user' });
+        res.status(400).json({ error: 'Error registering for the Game' });
     }
 });
 
 router.patch('/update-bingo/:gameId', auth, async (req : AuthRequest, res : Response) => {
     try{
         let reqPlayerGame = await playerGame.findOne({game : req.params.gameId});
+        let game = await Game.findById(reqPlayerGame!.game!._id);
+        
+        console.log("Checking if winner ", game?.name, game!.winner);
+        if(game!.winner)
+            return res.json({message: "Game is already finshed! "});
+            
         const gameSize = reqPlayerGame!.gameSize;
         const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
 
         const {updates} = req.body;
-        updates.forEach((entry: {rowIndex: number, colIndex: number, tick: any}) => {
-            console.log(" Entry : ", entry, typeof entry.rowIndex);
-            entries![entry.rowIndex][entry.colIndex].tick = entry.tick;
-        })
+        console.log(updates);
+        if(updates){
+        console.log("Inside update loop! ");
+            updates.forEach((entry: {rowIndex: number, colIndex: number, tick: any}) => {
+                console.log(" Entry : ", entry, typeof entry.rowIndex);
+                entries![entry.rowIndex][entry.colIndex].tick = entry.tick;
+            })
+        } 
         
         const bingo : number = checkForBingo(entries, gameSize);
         reqPlayerGame!.bingo = bingo;
         reqPlayerGame?.save();
-        console.log(gameSize, bingo, entries);
+        console.log(gameSize, bingo);
 
-        if(reqPlayerGame!.bingo == reqPlayerGame!.gameSize){
-            console.log(" Found a Winner! ")
-            console.log(reqPlayerGame!.game)
-            //Mark game as completed and add winner
-            // let gameWon  = Game.findById(reqPlayerGame!.game);
+        if(reqPlayerGame!.bingo >= gameSize){
+            console.log(game)
+            console.log(req.userDetails?.userId)
+            if(game){
+                const winner = await User.findById(req.userDetails?.userId).select('-password');
+                console.log(" Found a Winner! ")
+                console.log(winner)
+                game!.winner = winner!._id;
+                game!.winnerAns = reqPlayerGame!._id;
+                await game.save();
+                console.log(game);
+                return res.json({redirect:"reload", message:" Hurray you won! ", winner: winner!.username});
+            }
             // gameWon 
         }
         res.json({message: " At check for bingo ! ", bingo: bingo})
