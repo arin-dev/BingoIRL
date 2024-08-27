@@ -12,17 +12,22 @@ router.post('/register', async (req, res) => {
     console.log(req.body);
     const existingUser = await User.findOne({ username });
     if (existingUser) {
-      res.status(201).json({ message: 'User already exists. Please login or try a different username. ' });
+      res.status(201).json({ error: 'User already exists. Please login or try a different username. ' });
     }
     else{
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = new User({ username, password: hashedPassword });
       await user.save();
-      res.status(201).json({ message: 'User created successfully' });
+      const token = jwt.sign(
+        { userId: user._id, username: user.username }, 
+        process.env.JWT_SECRET as string,
+        { expiresIn: '1d'}
+      );  
+      res.status(201).json({ token, message: 'User created successfully' });
     }
     } catch ( error) {
     console.log("Printing error here :", error);
-    res.status(500).json({ error: 'Error registering user' });
+    res.status(500).json({ error: 'Error registering user! Please try again' });
   }
 });
 
@@ -47,7 +52,7 @@ router.post('/login', async (req, res) => {
     res.json({ token });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ error: 'Error logging in' });
+    res.status(500).json({ error: 'Issues with the server please try again later!' });
   }
 });
 
