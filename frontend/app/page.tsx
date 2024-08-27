@@ -1,7 +1,20 @@
 "use client"
 import Header from './components/header';
 
+import useAuthToken from './hooks/useAuthToken';
+import {useEffect} from 'react';
+
 export default function FunPage() {
+  const { token, updateToken, clearToken } = useAuthToken();
+
+  useEffect(() => {
+      if (!token) {
+      window.location.href = '/signin';
+      }
+  }, [token]);
+
+  if(!token)
+    return ;
   return (
     <>
     <Header currentPage='Home Page'/>

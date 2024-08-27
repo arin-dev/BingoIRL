@@ -18,11 +18,11 @@ export default function SignIn() {
         setErrorMessage('')
     }, [username, password])
 
-    useEffect(() => {
-        if (token) {
-            window.location.href = '/';
-          }
-    }, [token]);
+    // useEffect(() => {
+    //     if (!token) {
+    //     window.location.href = '/';
+    //     }
+    // }, [token]);
   
 
 
