@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import SubmitButton from '../components/button';
 
+import SubmitButton from '../components/button';
+import MiniFooter from '../components/miniFooter';
 import useAuthToken from '../hooks/useAuthToken';
 
 
@@ -26,9 +27,10 @@ export default function SignUp() {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-400">
         {/* <div className="z-10 w-[350px] h-[500px] items-center justify-around font-mono text-sm flex flex-col bg-gradient-to-t from-[rgb(0,0,0)] to-[rgb(0,0,250)] rounded-3xl"> */}
+        <div className='text-[300px] absolute inset-0 flex items-center justify-center'>BINGO IRL</div>
         <div className="z-10 w-[350px] h-[400px] items-center justify-around font-mono text-sm flex flex-col bg-white rounded-3xl">
             <h1 className="text-3xl font-bold pt-[50px]">Sign Up</h1>
-            {   errorMessage != '' && <div className='text-red-500'>{errorMessage}</div>}
+            {   errorMessage != '' && <div className='text-red-500 text-center'>{errorMessage}</div>}
             <form className="flex flex-col gap-4">
             <input
                 type="text"
@@ -47,6 +49,7 @@ export default function SignUp() {
             <SubmitButton
             onClick = {async ( e: any) =>{
                 e.preventDefault();
+                setErrorMessage('');
                 if(password != '' && username != '')
                 try{
                     const response = await axios.post('http://localhost:8000/api/auth/register',{
@@ -68,6 +71,7 @@ export default function SignUp() {
             <div className="flex items-center pb-[50px]">Already have an account? <a href="/signin" className="text-blue-600 font-bold py-2 px-4 hover:text-purple-400">Sign In</a></div>
             {/*The div with flex and items-center ensures both elements are on the same line. */}
         </div>
+        <MiniFooter />
         </main>
     );
 }

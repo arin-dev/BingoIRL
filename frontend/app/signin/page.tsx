@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import axios from 'axios'
+
+import MiniFooter from '../components/miniFooter';
 import SubmitButton from '../components/button';
-
 import useAuthToken from '../hooks/useAuthToken';
-
 
 export default function SignIn() {
     
@@ -29,9 +29,10 @@ export default function SignIn() {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-400">
         {/* <div className="z-10 w-[350px] h-[500px] max-w-5xl items-center justify-around font-mono text-sm flex flex-col bg-gradient-to-t from-[rgb(0,0,0)] to-[rgb(0,0,250)] rounded-3xl"> */}
-        <div className="z-10 w-[350px] h-[400px] items-center justify-around font-mono text-sm flex flex-col bg-white rounded-3xl">
+        <div className='text-[300px] absolute inset-0 flex items-center justify-center'>BINGO IRL</div>
+        <div className="z-10 w-[350px] h-[400px] font-mono text-sm flex flex-col items-center justify-around bg-white rounded-3xl opacity-[92%]">
             <h1 className="text-3xl font-bold pt-[50px]">Sign In</h1>
-            {   errorMessage != '' && <div className='text-red-500'>{errorMessage}</div>}
+            {   errorMessage != '' && <div className='text-red-500 text-center'>{errorMessage}</div>}
             <form className="flex flex-col gap-4 ">
             <input
                 type="text"
@@ -50,6 +51,7 @@ export default function SignIn() {
             <SubmitButton 
             onClick={async (e) =>{
                 e.preventDefault();
+                setErrorMessage('');
                 if(password != '' && username != '')
                 try{
                     const response = await axios.post('http://localhost:8000/api/auth/login',{
@@ -71,6 +73,7 @@ export default function SignIn() {
             <div className="flex items-center pb-[50px]">Don&apos;t have an account? <a href="/signup" className="text-blue-600 font-bold px-4 hover:text-purple-400">Sign Up</a></div>
             {/*The div with flex and items-center ensures both elements are on the same line.*/}
         </div>
+        <MiniFooter />
         </main>
     );
 }
