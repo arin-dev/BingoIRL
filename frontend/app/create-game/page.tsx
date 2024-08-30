@@ -7,9 +7,10 @@ import SubmitButton from '../components/button';
 
 
 export default function BingoTable() {
-  const [size, setSize] = useState(5);
+  const [size, setSize] = useState(3);
   const [table, setTable] = useState(Array(size).fill(null).map(() => Array(size).fill(null)));
   const [filled, setFilled] = useState(0);
+  // const [filled, setFilled] = useState(0);
 
   const handleSizeChange = (e : any) => {
     const newSize = parseInt(e.target.value)

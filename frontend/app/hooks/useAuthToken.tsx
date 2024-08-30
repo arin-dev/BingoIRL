@@ -8,8 +8,6 @@ const useAuthToken = () => {
     if (storedToken) {
       setToken(storedToken);
     }
-    // else
-    //   window.location.href = '/signin';
   }, []);
 
   const updateToken = (newToken: string) => {

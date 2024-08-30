@@ -18,7 +18,9 @@ dotenv.config();
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGODB_URI as string)
+mongoose.connect(process.env.MONGODB_URI as string, {
+  serverSelectionTimeoutMS: 2000,
+})
   .then(() => console.log('Connected to MongoDB'))
   .catch((error) => console.error('MongoDB connection error:', error));
 

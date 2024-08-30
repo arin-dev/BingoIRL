@@ -1,39 +1,44 @@
 "use client"
 import Header from './components/header';
-
 import useAuthToken from './hooks/useAuthToken';
-import {useEffect} from 'react';
+import { useEffect } from 'react';
 
 export default function FunPage() {
-  const { token, updateToken, clearToken } = useAuthToken();
+  const { token } = useAuthToken();
 
   useEffect(() => {
-      if (!token) {
+    console.log("Token in useEffect:", token);
+    if (!token) {
+      console.log("Redirecting to sign-in");
       window.location.href = '/signin';
-      }
+    }
   }, [token]);
 
-  if(!token)
-    return ;
+  console.log("Token before return:", token);
+  
+  if (!token) {
+    return null; // or <div>Loading...</div>;
+  }
+
   return (
     <>
-    <Header currentPage='Home Page'/>
-    <main className="flex flex-col items-center justify-center p-24">
+      <Header currentPage='Home Page' />
+      <main className="flex flex-col items-center justify-center p-24">
         <h1 className="text-3xl font-bold">Welcome to the Wacky Wonderland!</h1>
         <p className="mt-4">Prepare for some utterly ridiculous activities:</p>
         <ul className="mt-2">
-            <li>🎮 Challenge a potato to a game of chess</li>
-            <li>🧩 Attempt to solve the mystery of the missing left sock</li>
-            <li>🎨 Paint a masterpiece using only spaghetti</li>
-            <li>📖 Read a story about a cat who thinks it&apos;s a dog</li>
+          <li>🎮 Challenge a potato to a game of chess</li>
+          <li>🧩 Attempt to solve the mystery of the missing left sock</li>
+          <li>🎨 Paint a masterpiece using only spaghetti</li>
+          <li>📖 Read a story about a cat who thinks it&apos;s a dog</li>
         </ul>
         <button 
-            className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            onClick={() => alert('Surprise! You just won a lifetime supply of rubber chickens!')}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          onClick={() => alert('Surprise! You just won a lifetime supply of rubber chickens!')}
         >
-            Click for a Hilarious Surprise!
+          Click for a Hilarious Surprise!
         </button>
-    </main>
+      </main>
     </>
   );
 }
