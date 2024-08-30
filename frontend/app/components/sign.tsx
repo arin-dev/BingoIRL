@@ -9,12 +9,15 @@ import useAuthToken from '../hooks/useAuthToken';
 import { InitialBg } from './initial_bg';
 
 interface AuthFormProps {
-    isSignIn: boolean;
     label: string;
+    target: string;
+    targetLabel: string;
+    targetText: string;
+    processingLabel: string;
     endpoint: string;
 }
 
-export const AuthForm: React.FC<AuthFormProps> = ({ isSignIn, label, endpoint }) => {
+export const AuthForm: React.FC<AuthFormProps> = ({label, endpoint, processingLabel, target, targetLabel, targetText }) => {
     const { token, updateToken } = useAuthToken();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -34,7 +37,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ isSignIn, label, endpoint })
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setSubmitLabel(isSignIn ? 'Signing you in...' : 'Signing you up...');
+        setSubmitLabel(processingLabel);
         setErrorMessage('');
         if (password && username) {
             try {
@@ -60,7 +63,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ isSignIn, label, endpoint })
         <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-400">
             <InitialBg />
             <div className="z-10 w-[350px] h-[400px] font-mono text-sm flex flex-col items-center justify-around bg-white rounded-3xl opacity-[93%]">
-                <h1 className="text-3xl font-bold pt-[50px]">{isSignIn ? 'Sign In' : 'Sign Up'}</h1>
+                <h1 className="text-3xl font-bold pt-[50px]">{label}</h1>
                 {errorMessage && <div className='text-red-500 text-center'>{errorMessage}</div>}
                 <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
                     <input
@@ -80,9 +83,9 @@ export const AuthForm: React.FC<AuthFormProps> = ({ isSignIn, label, endpoint })
                     <SubmitButton label={submitLabel} onClick={handleSubmit} />
                 </form>
                 <div className="flex items-center pb-[50px]">
-                    {isSignIn ? "Don't have an account?" : "Already have an account?"}
-                    <a href={isSignIn ? "/signup" : "/signin"} className="text-blue-600 font-bold px-4 hover:text-purple-400">
-                        {isSignIn ? 'Sign Up' : 'Sign In'}
+                {targetText}
+                    <a href={`/${target}`} className="text-blue-600 font-bold px-4 hover:text-purple-400">
+                        {targetLabel}
                     </a>
                 </div>
             </div>

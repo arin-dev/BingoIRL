@@ -1,18 +1,21 @@
 "use client"
 import Header from './components/header';
 import useAuthToken from './hooks/useAuthToken';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function FunPage() {
   const { token } = useAuthToken();
+  const [loading, setLoading] = useState(false); // Add loading state
 
   useEffect(() => {
     console.log("Token in useEffect:", token);
-    if (!token) {
-      console.log("Redirecting to sign-in");
+    if (!token && loading) {
       window.location.href = '/signin';
+      setLoading(true);
+    }else{
+      console.log("Redirecting to sign-in");
     }
-  }, [token]);
+  }, [token, loading]);
 
   console.log("Token before return:", token);
   

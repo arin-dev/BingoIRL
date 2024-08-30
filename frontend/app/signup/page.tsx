@@ -3,5 +3,5 @@
 import { AuthForm } from '../components/sign';
 
 export default function SignIn() {
-    return <AuthForm isSignIn={false} label="Sign Up" endpoint="register" />;
+    return <AuthForm label="Sign Up" endpoint="register" target='signin' targetLabel='Sign In' processingLabel='Singing you up...' targetText='Already have an account?'/>;
 }
