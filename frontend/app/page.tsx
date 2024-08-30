@@ -5,23 +5,19 @@ import { useEffect, useState } from 'react';
 
 export default function FunPage() {
   const { token } = useAuthToken();
-  const [loading, setLoading] = useState(false); // Add loading state
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log("Token in useEffect:", token);
-    if (!token && loading) {
+    if (loading)
+      {setLoading(false); return;}
+    if (!token) {
       window.location.href = '/signin';
-      setLoading(true);
-    }else{
-      console.log("Redirecting to sign-in");
     }
   }, [token, loading]);
 
-  console.log("Token before return:", token);
-  
-  if (!token) {
-    return null; // or <div>Loading...</div>;
-  }
+
+  if(!token)
+    return ;
 
   return (
     <>

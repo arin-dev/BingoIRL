@@ -1,9 +1,10 @@
 
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Header from '../components/header';
 import SubmitButton from '../components/button';
+import useAuthToken from '../hooks/useAuthToken';
 
 
 export default function BingoTable() {
@@ -12,6 +13,21 @@ export default function BingoTable() {
   const [filled, setFilled] = useState(0);
   // const [filled, setFilled] = useState(0);
 
+  const { token } = useAuthToken();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (loading)
+      {setLoading(false); return;}
+    if (!token) {
+      window.location.href = '/signin';
+    }
+  }, [token, loading]);
+
+
+  if(!token)
+    return ;
+  
   const handleSizeChange = (e : any) => {
     const newSize = parseInt(e.target.value)
     setSize(newSize);
