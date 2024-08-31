@@ -5,17 +5,5 @@
       "src": "package.json",
       "use": "@vercel/next"
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "dev",
-    "NEXT_PUBLIC_BASE_URL": "https://bingo-irl-api.vercel.app/",
-    "NEXT_PUBLIC_PRODUCTION_DOMAIN": "https://bingo-irl-api.vercel.app/",
-    "NEXT_PUBLIC_DEV_DOMAIN": "https://bingo-irl-api.vercel.app/"
-  }
+  ]
 }
