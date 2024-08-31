@@ -6,14 +6,14 @@ const nextConfig = {
         return [
           {
             source: '/api/:path*',
-            destination: `${process.env.PRODUCTION_DOMAIN}/api/:path*`,
+            destination: `${process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN}/api/:path*`,
           },
         ];
       } else {
         return [
           {
             source: '/api/:path*',
-            destination: `${process.env.DEV_DOMAIN}/api/:path*`,
+            destination: `${process.env.NEXT_PUBLIC_DEV_DOMAIN}/api/:path*`,
           },
         ];
       }
