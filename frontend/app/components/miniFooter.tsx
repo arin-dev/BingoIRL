@@ -5,7 +5,7 @@ import { faEnvelope } from '@fortawesome/free-solid-svg-icons';
 
 const MiniFooter = () => {
     return (
-        <footer className="flex flex-row items-center p-4 bg-gray-200 mt-auto justify-between" style={{ position: 'fixed', bottom: 0, width: '100%' }}>
+        <footer className="flex flex-row items-center text-center p-4 bg-gray-200 mt-auto justify-between" style={{ position: 'fixed', bottom: 0, width: '100%' }}>
             <p className='sm:pl-10'> 2024 &copy;  </p>
             <p className='sm:pl-[50px]'>Created with ❤️ by Arin Dev  </p>
             <div className="flex items-center">
