@@ -26,20 +26,22 @@ const playerGameSchema = new mongoose.Schema({
 })
 
 // no need to include next() as when using promise or async it is implemented automatically.
-gameSchema.post('deleteOne', async function(doc, next) {
-  const game = await Game.findById(doc._id);
-  if (game) {
-    const users = await User.find({ currentGames: game._id });
-    for (const user of users) {
-      user.currentGames = user.currentGames.filter(gameId => gameId !== game._id);
-      await user.save();
-    }
-    const playerGames = await playerGame.find({ game: game._id });
-    for (const playerGameDoc of playerGames) {
-      await playerGameDoc.deleteOne();
-    }
+gameSchema.pre('deleteOne', async function(doc) {
+  const game = await Game.findById(this.getFilter()._id);
+  console.log("Inside delete One pre hook! ", game);
+  const users = game!.registeredPlayers;
+  console.log(users);
+  for (const U of users) {
+    const user = await User.findById(U).exec();
+    console.log(U,"before deleteing games" , user?.currentGames);
+    user!.currentGames = user!.currentGames.filter(GAME => {console.log(typeof GAME.gameId, typeof game!._id); return GAME.gameId?.toString() !== game!._id.toString()}) as any;
+    await user!.save();
+    console.log("after deleting games : ", user?.currentGames);
   }
-  next();
+
+  const deleteResult = await playerGame.deleteMany({ game: game!._id });
+  console.log("Deleted player games count:", deleteResult.deletedCount);
+  // next();
 });
 
 gameSchema.post('save', async function(doc, next) {

@@ -16,6 +16,8 @@ interface AuthFormProps {
     processingLabel: string;
     endpoint: string;
 }
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+
 
 export const AuthForm: React.FC<AuthFormProps> = ({label, endpoint, processingLabel, target, targetLabel, targetText }) => {
     const { token, updateToken } = useAuthToken();
@@ -41,7 +43,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({label, endpoint, processingLa
         setErrorMessage('');
         if (password && username) {
             try {
-                const response = await axios.post(`http://localhost:8000/api/auth/${endpoint}`, {
+                const response = await axios.post(`${BASE_URL}/api/auth/${endpoint}`, {
                     username,
                     password
                 });

@@ -21,7 +21,7 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
     console.log(req.body);
     if (req.userDetails) {
         try {
-        const user = await User.findById(req.userDetails.userId).select('_id, username'); 
+        const user = await User.findById(req.userDetails.userId).select('-password'); 
         const { name, gameSize, prize } = req.body;
         // console.log(gameSize);
         console.log(name, user?.username);
@@ -44,6 +44,13 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
         );
         console.log(entries![0]);
         console.log("Created a game now attaching with the creator!! ");
+        console.log(user);
+        console.log("Player before : ", user);
+        user!.currentGames = user!.currentGames;
+        user!.currentGames.push({gameId : newGame._id, name: newGame.name});
+        user?.save();
+        console.log("Player After : ", user);
+
         const newPlayerGame = new playerGame({
             player: user,
             game: newGame._id,
@@ -112,7 +119,7 @@ router.patch('/update-bingo/:gameId', auth, async (req : AuthRequest, res : Resp
         
         console.log("Checking if winner ", game?.name, game!.winner);
         if(game!.winner)
-            return res.json({message: "Game is already finshed! "});
+            return res.json({message: "Game is already finshed! ", winner: game});
             
         const gameSize = reqPlayerGame!.gameSize;
         const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
@@ -151,6 +158,35 @@ router.patch('/update-bingo/:gameId', auth, async (req : AuthRequest, res : Resp
     } catch (error) {
         res.status(400).json({ error: 'Error marking as Completed!' });
     }
+})
+
+router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
+    try {
+        const game = await Game.findById(req.params.gameId);
+        console.log("HERE AT DETELE ROUTE: tbd : ", req.params.gameId, "game : ",game);
+        try{
+            await game!.deleteOne();
+        } catch (error) {
+            return res.status(400).json({error : "Game doesn't exist! "})
+        }
+        res.json({ message: "Game deleted successfully!" });
+    } catch (error) {
+        res.status(500).json({ error: 'Error deleting game!' });
+    }
+})
+
+router.delete('/dev/delete-all-currentGames', async (req: AuthRequest, res: Response) => {
+    console.log("DELETING all Current Games attached : ")
+    const users = await User.find();
+    for(const U of users){
+        const user = await User.findById(U).exec();
+        console.log(user);
+        user!.currentGames = [] as any;
+        await user!.save();
+        console.log(user?.currentGames);
+    }
+
+    return res.status(201).json({message: "successful"});
 })
 
 export default router;
