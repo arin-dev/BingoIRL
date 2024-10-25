@@ -15,25 +15,30 @@ export default function FunPage() {
     }
   }, [token, loading]);
 
+  const redirectToCG = () => {
+    window.location.href = '/create-game';
+  };
 
   if(!token)
     return ;
 
   return (
     <>
-      <Header currentPage='Home Page' />
+      <Header currentPage='BingoIRL' />
       <main className="flex flex-col items-center justify-center p-24">
-        <h1 className="text-3xl font-bold">Welcome to the Wacky Wonderland!</h1>
-        <p className="mt-4">Prepare for some utterly ridiculous activities:</p>
+        <h1 className="text-3xl font-bold">Welcome to BingoIRL!</h1>
+        <p className="mt-4">Turn your boring activities into fun times with friends and colleagues!</p>
+        <p className="mt-4">Get ready for an interactive experience:</p>
         <ul className="mt-2">
-          <li>🎮 Challenge a potato to a game of chess</li>
-          <li>🧩 Attempt to solve the mystery of the missing left sock</li>
-          <li>🎨 Paint a masterpiece using only spaghetti</li>
-          <li>📖 Read a story about a cat who thinks it&apos;s a dog</li>
+          <li>🎉 Mark off squares as your friends share their funniest quirks!</li>
+          <li>🤔 Spot the moment when someone makes their classic joke!</li>
+          <li>👀 Watch for predictable actions, like someone always being late!</li>
+          <li>😂 Enjoy the hilarity as you complete your BingoIRL card!</li>
+          <li>🏆 Celebrate the winner with a fun prize!</li>
         </ul>
         <button 
           className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          onClick={() => alert('Surprise! You just won a lifetime supply of rubber chickens!')}
+          onClick={() => redirectToCG()}
         >
           Click for a Hilarious Surprise!
         </button>

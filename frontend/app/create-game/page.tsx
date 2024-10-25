@@ -5,7 +5,9 @@ import { useState, useEffect } from 'react';
 import Header from '../components/header';
 import SubmitButton from '../components/button';
 import useAuthToken from '../hooks/useAuthToken';
+import axios from 'axios';
 
+const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
 export default function BingoTable() {
   const [size, setSize] = useState(3);
@@ -94,10 +96,39 @@ export default function BingoTable() {
         </div>
         <div className='pt-4'>
             <SubmitButton
-                onClick={e => {
-                  if (filled !== size * size) setErrorMessage(`Fill the remaining ${size * size - filled} blocks`);
-                  !gameName && setErrorMessage(e => e ? e + " and give a name to the game" : "Give a name to the game")
-                  // filled !== size * size ? alert('Please fill all the entries') : alert(`Game Created: ${gameName}, Prize: ${prize}`)
+                onClick={async e => {
+                  if (filled !== size * size) {
+                    setErrorMessage(`Fill the remaining ${size * size - filled} blocks`);
+                    return;
+                  }
+                  if (!gameName) {
+                    setErrorMessage(e => e ? e + " and give a name to the game" : "Give a name to the game");
+                    return;
+                  }
+
+                  // const playerEntries = table.map(row => row.map(cell => cell ? { text: cell, tick: false } : null).filter(Boolean));
+                  const playerEntries = table;
+                  const data = {
+                    name: gameName,
+                    gameSize: size,
+                    prize: prize,
+                    playerEntries: playerEntries
+                  };
+
+                  try {
+                    console.log(`${BASE_URL}api/game/create-game/`);
+                    console.log(data);
+                    console.log(token);
+                    const response = await axios.post(`${BASE_URL}api/game/create-game/`, data, {
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                    alert(`Game Created: ${response.data.message}, Prize: ${response.data.gameId}`);
+                  } catch (error) {
+                    setErrorMessage('Error creating game');
+                  }
                 }}
                 label='Create Game!'
             />
