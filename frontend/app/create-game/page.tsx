@@ -35,8 +35,7 @@ export default function BingoTable() {
   if(!token)
     return ;
 
-  const handleSizeChange = (e : any) => {
-    const newSize = parseInt(e.target.value)
+  const handleSizeChange = (newSize: number) => {
     setSize(newSize);
     setFilled(0);
     setTable(Array(newSize).fill(null).map(() => Array(newSize).fill(null)));
@@ -44,26 +43,28 @@ export default function BingoTable() {
 
   return (
     <div className="flex flex-col h-screen">
-    <Header currentPage='Game' />
+    <Header currentPage={`Let's Create a New Game`} />
     <div className="p-4 flex flex-col justify-center items-center bg-teal-100 h-full">
-        <div className="mb-5">
+        <div className="flex flex-col md:flex-row justify-center items-center mb-5">
             <input
                 className="border p-2 mb-2"
                 type="text"
                 placeholder="Name of the Game"
                 onChange={(e) => setGameName(e.target.value)}
             />
+            <div className="mb-2 border bg-white flex justify-center items-center w-full md:w-[80px]">
+                <button 
+                    className="rounded-full p-2 text-blue-500 bg-blue-100 hover:bg-blue-200" 
+                    onClick={() => handleSizeChange(Math.max(size - 1, 2))}
+                > - </button>
+                <span className="mx-2">{size}</span>
+                <button 
+                    className="rounded-full p-2 text-blue-500 bg-blue-100 hover:bg-blue-200" 
+                    onClick={() => handleSizeChange(Math.min(size + 1, 5))}
+                > + </button>
+            </div>
             <input
                 className="border p-2 mb-2"
-                type="number"
-                value={size}
-                onChange={handleSizeChange}
-                placeholder="Enter size (n)"
-                min="2"
-                max="5"
-            />
-            <input
-                className="border p-2 mb-5"
                 type="text"
                 placeholder="Prize for the winner"
                 onChange={(e) => setPrize(e.target.value)}
