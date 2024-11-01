@@ -9,9 +9,16 @@ import { infoText } from "../data/infoContent";
 const Header: React.FC <{ currentPage : string }> = ({currentPage = "Under Testing"}) => {
   const { clearToken } = useAuthToken();
   const [ infoIsActive, setInfoIsActive ] = useState(false);
+  // This will work every time as it initializes the username state with the value from localStorage or defaults to "Unknown" if not found.
+  // const [ username, setUserName ] = useState(() => {
+  //   const storedUsername = localStorage.getItem('username') || "Unknow";
+  //   // return storedUsername ? JSON.parse(storedUsername) : "Unknown";
+  // });
+  const username = localStorage.getItem('username') || "Unknown";
 
   const handleLogout = () => {
     clearToken();
+    localStorage.clear();
     window.location.href = '/signin';
   };
 
@@ -27,7 +34,7 @@ const Header: React.FC <{ currentPage : string }> = ({currentPage = "Under Testi
 
         <div className="flex items-center space-x-4">
           <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-lg font-bold">
-            A
+            {username[0]}
           </div>
           <button
             onClick={handleInfo}

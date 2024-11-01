@@ -48,6 +48,8 @@ export const AuthForm: React.FC<AuthFormProps> = ({label, endpoint, processingLa
                     password
                 });
                 updateToken(response.data.token || '');
+                localStorage.setItem('userGames', JSON.stringify(response.data.currentGames || [])); // // Store games in local cache
+                localStorage.setItem('username', response.data.username || ''); // Store username in local cache
             } catch (error: any) {
                 if (error.response) {
                     setErrorMessage(error.response.data.error || 'An error occurred');

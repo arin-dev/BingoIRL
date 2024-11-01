@@ -36,9 +36,11 @@ export default function BingoTable() {
     return ;
 
   const handleSizeChange = (newSize: number) => {
-    setSize(newSize);
-    setFilled(0);
-    setTable(Array(newSize).fill(null).map(() => Array(newSize).fill(null)));
+    if(size!=newSize){
+      setSize(newSize);
+      setFilled(0);
+      setTable(Array(newSize).fill(null).map(() => Array(newSize).fill(null)));
+    }
   };
 
   return (

@@ -23,7 +23,8 @@ router.post('/register', async (req, res) => {
         process.env.JWT_SECRET as string,
         { expiresIn: '1d'}
       );  
-      res.status(201).json({ token, message: 'User created successfully' });
+      // res.status(201).json({ token, message: 'User created successfully' });
+      res.json({ token, username: user.username, currentGames: user.currentGames, message: 'User created successfully' });
     }
     } catch ( error) {
     console.log("Printing error here :", error);
@@ -47,9 +48,10 @@ router.post('/login', async (req, res) => {
       { expiresIn: '1d'}
     );
 
-    console.log(" User ID : ", user.username);
-    console.log(token);
-    res.json({ token });
+    // console.log(" User ID : ", user.username);
+    // console.log(token);
+    // currentGames does not need to be confidential, sending it in the response instead
+    res.json({ token, username: user.username, currentGames: user.currentGames });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: 'Issues with the server please try again later!' });
