@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import Header from './components/header';
 import useAuthToken from './hooks/useAuthToken';
 import axios from 'axios';
@@ -22,6 +23,7 @@ export default function HomePage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [games, setGames] = useState<GameSummary[]>([]);
   const [joinId, setJoinId] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false);
 
   // Hydration guard: localStorage isn't available on first SSR pass
   useEffect(() => {
@@ -40,9 +42,23 @@ export default function HomePage() {
 
   if (!token) return null;
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const id = joinId.trim();
-    if (id) router.push(`/join-game/${id}`);
+    if (!id) return;
+    setJoinLoading(true);
+    try {
+      const res = await axios.get(`${BASE_URL}api/game/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data.playerGame) {
+        router.push(`/game/${id}`);
+      } else {
+        router.push(`/join-game/${id}`);
+      }
+    } catch {
+      toast.error('Game not found. Check the ID and try again.');
+      setJoinLoading(false);
+    }
   };
 
   return (
@@ -69,10 +85,11 @@ export default function HomePage() {
             onKeyDown={e => e.key === 'Enter' && handleJoin()}
           />
           <button
-            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            className="bg-green-500 hover:bg-green-700 disabled:opacity-50 text-white font-bold py-2 px-4 rounded"
             onClick={handleJoin}
+            disabled={joinLoading || !joinId.trim()}
           >
-            Join
+            {joinLoading ? '...' : 'Join'}
           </button>
         </div>
 
