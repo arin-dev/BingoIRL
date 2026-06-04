@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import Header from './components/header';
 import useAuthToken from './hooks/useAuthToken';
 import axios from 'axios';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrash } from '@fortawesome/free-solid-svg-icons';
 
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
@@ -15,6 +17,7 @@ type GameSummary = {
   prize: string | null;
   gameSize: number;
   winnerId: number | null;
+  isCreator: boolean;
 };
 
 export default function HomePage() {
@@ -41,6 +44,20 @@ export default function HomePage() {
   }, [token]);
 
   if (!token) return null;
+
+  const handleDelete = async (gameId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // don't navigate into the game
+    if (!confirm('Delete this game? This cannot be undone.')) return;
+    try {
+      await axios.delete(`${BASE_URL}api/game/delete-game/${gameId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setGames(prev => prev.filter(g => g.gameId !== gameId));
+      toast.success('Game deleted.');
+    } catch {
+      toast.error('Failed to delete game.');
+    }
+  };
 
   const handleJoin = async () => {
     const id = joinId.trim();
@@ -101,9 +118,9 @@ export default function HomePage() {
         ) : (
           <div className="flex flex-col gap-3">
             {games.map(g => (
-              <button
+              <div
                 key={g.gameId}
-                className="border rounded-lg p-4 text-left hover:bg-gray-50 flex justify-between items-center transition-colors"
+                className="border rounded-lg p-4 hover:bg-gray-50 flex justify-between items-center transition-colors cursor-pointer"
                 onClick={() => router.push(`/game/${g.gameId}`)}
               >
                 <div>
@@ -111,19 +128,27 @@ export default function HomePage() {
                   <div className="text-sm text-gray-500">
                     {g.gameSize}×{g.gameSize} grid
                     {g.prize && ` · Prize: ${g.prize}`}
-                    {` · ID: ${g.gameId}`}
                   </div>
                 </div>
-                <span
-                  className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                    g.winnerId
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  {g.winnerId ? 'Finished' : 'In Progress'}
-                </span>
-              </button>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      g.winnerId ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {g.winnerId ? 'Finished' : 'In Progress'}
+                  </span>
+                  {g.isCreator && (
+                    <button
+                      onClick={e => handleDelete(g.gameId, e)}
+                      className="text-red-400 hover:text-red-600 p-1 transition-colors"
+                      title="Delete game"
+                    >
+                      <FontAwesomeIcon icon={faTrash} />
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

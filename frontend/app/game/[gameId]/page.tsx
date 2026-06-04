@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import Header from '../../components/header';
 import useAuthToken from '../../hooks/useAuthToken';
 import axios from 'axios';
@@ -128,8 +129,10 @@ export default function GamePage() {
             ? { ...prev, playerGame: { ...prev.playerGame, bingo: res.data.bingo } }
             : prev
         );
+        toast.success('Changes saved!');
       }
     } catch {
+      toast.error('Failed to save. Try again.');
       // Leave local state as-is so the user can retry
     } finally {
       setSubmitting(false);

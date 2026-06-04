@@ -128,15 +128,19 @@ router.get('/my-games', auth, async (req: AuthRequest, res: Response) => {
     const userGames = await prisma.userGame.findMany({
       where: { userId: req.userDetails.userId },
       include: {
-        game: { select: { id: true, name: true, prize: true, gameSize: true, winnerId: true } },
+        game: {
+          select: { id: true, name: true, prize: true, gameSize: true, winnerId: true, createdById: true },
+        },
       },
     });
+    const userId = req.userDetails.userId;
     res.json(userGames.map(ug => ({
       gameId: ug.gameId,
       name: ug.name,
       prize: ug.game.prize,
       gameSize: ug.game.gameSize,
       winnerId: ug.game.winnerId,
+      isCreator: ug.game.createdById === userId,
     })));
   } catch (error) {
     res.status(500).json({ error: 'Error fetching games' });
