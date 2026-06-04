@@ -43,7 +43,7 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
 router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const gameId = parseInt(req.params.gameId);
+    const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
     const { data } = req.body;
 
@@ -75,7 +75,7 @@ router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Re
 router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const gameId = parseInt(req.params.gameId);
+    const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
 
     const game = await prisma.game.findUnique({ where: { id: gameId } });
@@ -147,7 +147,7 @@ router.get('/my-games', auth, async (req: AuthRequest, res: Response) => {
 router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const gameId = parseInt(req.params.gameId);
+    const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
 
     const game = await prisma.game.findUnique({
@@ -189,7 +189,7 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const gameId = parseInt(req.params.gameId);
+    const gameId = req.params.gameId;
     await prisma.game.delete({ where: { id: gameId } });
     res.json({ message: 'Game deleted successfully!' });
   } catch (error) {

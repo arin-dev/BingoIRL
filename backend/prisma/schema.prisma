@@ -18,7 +18,7 @@ model User {
 }
 
 model Game {
-  id                Int          @id @default(autoincrement())
+  id                String       @id @default(uuid())
   name              String
   gameSize          Int          @default(3)
   prize             String?
@@ -39,7 +39,7 @@ model UserGame {
   user   User   @relation(fields: [userId], references: [id])
   userId Int
   game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  gameId Int
+  gameId String
   name   String // denormalized game name for display without a join
 
   @@unique([userId, gameId])
@@ -51,7 +51,7 @@ model PlayerGame {
   player   User   @relation(fields: [playerId], references: [id])
   playerId Int
   game     Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  gameId   Int
+  gameId   String
   gameSize Int
   entries  String // JSON-serialized Array<Array<{ text: string; tick: boolean }>>
   bingo    Int    @default(0)

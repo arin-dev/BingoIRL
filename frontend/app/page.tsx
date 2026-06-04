@@ -9,7 +9,7 @@ import axios from 'axios';
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
 type GameSummary = {
-  gameId: number;
+  gameId: string;
   name: string;
   prize: string | null;
   gameSize: number;

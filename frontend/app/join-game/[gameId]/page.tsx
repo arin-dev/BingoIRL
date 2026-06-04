@@ -73,7 +73,17 @@ export default function JoinGamePage() {
     return <div className="flex items-center justify-center h-screen text-gray-500">Loading game...</div>;
   }
   if (error && !gameInfo) {
-    return <div className="flex items-center justify-center h-screen text-red-500">{error}</div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4">
+        <p className="text-red-500">{error}</p>
+        <button
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          onClick={() => router.push('/')}
+        >
+          ← Back to Home
+        </button>
+      </div>
+    );
   }
   if (!gameInfo) return null;
 

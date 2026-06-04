@@ -10,7 +10,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
 type BingoEntry = { text: string; tick: boolean };
 type GameData = {
-  id: number;
+  id: string;
   name: string;
   gameSize: number;
   prize: string | null;
@@ -30,12 +30,22 @@ export default function GamePage() {
   const { token } = useAuthToken();
   const [authLoading, setAuthLoading] = useState(true);
   const [game, setGame] = useState<GameData | null>(null);
-  const [entries, setEntries] = useState<BingoEntry[][]>([]);
+
+  // localEntries: what the user sees (may have un-submitted toggles)
+  // serverEntries: last state successfully committed to the server
+  const [localEntries, setLocalEntries] = useState<BingoEntry[][]>([]);
+  const [serverEntries, setServerEntries] = useState<BingoEntry[][]>([]);
+
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState('');
-  const [updating, setUpdating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const gameId = params.gameId as string;
+
+  // A cell is "pending" if its local tick differs from the last submitted server state
+  const hasPending = localEntries.some((row, r) =>
+    row.some((cell, c) => serverEntries[r]?.[c]?.tick !== cell.tick)
+  );
 
   const fetchGame = useCallback(async (currentToken: string) => {
     try {
@@ -48,7 +58,15 @@ export default function GamePage() {
         router.push(`/join-game/${gameId}`);
         return;
       }
-      setEntries(data.playerGame.entries);
+      // Only sync entries from server if there are no local pending changes
+      // (avoid clobbering draft state during polling)
+      setServerEntries(data.playerGame.entries);
+      setLocalEntries(prev => {
+        const hasDraft = prev.length > 0 && prev.some((row, r) =>
+          row.some((cell, c) => data.playerGame!.entries[r]?.[c]?.tick !== cell.tick)
+        );
+        return hasDraft ? prev : data.playerGame!.entries;
+      });
     } catch {
       setError('Failed to load game. Check the game ID and try again.');
     } finally {
@@ -63,41 +81,58 @@ export default function GamePage() {
     fetchGame(token);
   }, [token, authLoading, router, fetchGame]);
 
-  // Poll every 5 seconds for winner / state updates
+  // Poll every 5 seconds for winner / other players joining
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => fetchGame(token), 5000);
     return () => clearInterval(interval);
   }, [token, fetchGame]);
 
-  const handleCellClick = async (rowIndex: number, colIndex: number) => {
-    if (!token || updating || game?.winner) return;
+  // Toggle a cell locally — no server call until user clicks Submit
+  const handleCellClick = (rowIndex: number, colIndex: number) => {
+    if (game?.winner) return;
+    setLocalEntries(prev => {
+      const next = prev.map(row => row.map(cell => ({ ...cell })));
+      next[rowIndex][colIndex].tick = !next[rowIndex][colIndex].tick;
+      return next;
+    });
+  };
 
-    // Optimistic update
-    const newEntries = entries.map(row => row.map(cell => ({ ...cell })));
-    newEntries[rowIndex][colIndex].tick = !newEntries[rowIndex][colIndex].tick;
-    setEntries(newEntries);
+  // Submit all pending changes to the server at once
+  const handleSubmit = async () => {
+    if (!token || !hasPending || submitting) return;
+    setSubmitting(true);
 
-    setUpdating(true);
+    // Collect only the cells that changed from the last server state
+    const updates: { rowIndex: number; colIndex: number; tick: boolean }[] = [];
+    localEntries.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (serverEntries[r]?.[c]?.tick !== cell.tick) {
+          updates.push({ rowIndex: r, colIndex: c, tick: cell.tick });
+        }
+      })
+    );
+
     try {
       const res = await axios.patch(
         `${BASE_URL}api/game/update-bingo/${gameId}`,
-        { updates: [{ rowIndex, colIndex, tick: newEntries[rowIndex][colIndex].tick }] },
+        { updates },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setServerEntries(localEntries.map(row => row.map(cell => ({ ...cell }))));
       if (res.data.redirect === 'reload') {
         fetchGame(token);
       } else {
         setGame(prev =>
-          prev && prev.playerGame
+          prev?.playerGame
             ? { ...prev, playerGame: { ...prev.playerGame, bingo: res.data.bingo } }
             : prev
         );
       }
     } catch {
-      setEntries(entries); // revert on failure
+      // Leave local state as-is so the user can retry
     } finally {
-      setUpdating(false);
+      setSubmitting(false);
     }
   };
 
@@ -125,8 +160,7 @@ export default function GamePage() {
         <div className="flex flex-wrap gap-4 text-sm text-gray-600">
           {game.prize && <span>Prize: <strong>{game.prize}</strong></span>}
           <span>Players: <strong>{game.players.length}</strong></span>
-          <span>Your bingo lines: <strong>{game.playerGame?.bingo ?? 0}</strong></span>
-          <span className="text-gray-400">ID: {game.id}</span>
+          <span>Bingo lines: <strong>{game.playerGame?.bingo ?? 0}</strong></span>
         </div>
 
         {/* Bingo grid */}
@@ -134,30 +168,44 @@ export default function GamePage() {
           className="grid border-2 border-black"
           style={{ gridTemplateColumns: `repeat(${game.gameSize}, 1fr)` }}
         >
-          {entries.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <button
-                key={`${rowIndex}-${colIndex}`}
-                onClick={() => handleCellClick(rowIndex, colIndex)}
-                disabled={!!game.winner || updating}
-                className={`w-24 h-24 border border-black p-2 text-xs text-center flex items-center justify-center transition-colors leading-tight
-                  ${cell.tick
-                    ? 'bg-green-500 text-white line-through'
-                    : 'bg-yellow-100 hover:bg-yellow-200 text-gray-800'
-                  }
-                  ${game.winner ? 'cursor-default' : 'cursor-pointer'}
-                `}
-              >
-                {cell.text}
-              </button>
-            ))
+          {localEntries.map((row, rowIndex) =>
+            row.map((cell, colIndex) => {
+              const isPending = serverEntries[rowIndex]?.[colIndex]?.tick !== cell.tick;
+              return (
+                <button
+                  key={`${rowIndex}-${colIndex}`}
+                  onClick={() => handleCellClick(rowIndex, colIndex)}
+                  disabled={!!game.winner}
+                  className={`w-24 h-24 border border-black p-2 text-xs text-center flex items-center justify-center transition-colors leading-tight relative
+                    ${cell.tick && !isPending ? 'bg-green-500 text-white line-through' : ''}
+                    ${isPending ? 'bg-amber-400 text-white' : ''}
+                    ${!cell.tick && !isPending ? 'bg-yellow-100 hover:bg-yellow-200 text-gray-800' : ''}
+                    ${game.winner ? 'cursor-default' : 'cursor-pointer'}
+                  `}
+                >
+                  {cell.text}
+                  {isPending && (
+                    <span className="absolute top-1 right-1 text-[8px] font-bold opacity-70">●</span>
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
 
+        {/* Submit pending changes */}
+        {hasPending && !game.winner && (
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="bg-blue-500 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded"
+          >
+            {submitting ? 'Submitting...' : 'Submit Changes'}
+          </button>
+        )}
+
         {/* Players */}
-        <p className="text-sm text-gray-400">
-          {game.players.join(' · ')}
-        </p>
+        <p className="text-sm text-gray-400">{game.players.join(' · ')}</p>
 
         {game.winner && (
           <button
