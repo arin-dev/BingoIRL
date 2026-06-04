@@ -121,6 +121,70 @@ router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Respon
   }
 });
 
+// All games the current user is registered in
+router.get('/my-games', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const userGames = await prisma.userGame.findMany({
+      where: { userId: req.userDetails.userId },
+      include: {
+        game: { select: { id: true, name: true, prize: true, gameSize: true, winnerId: true } },
+      },
+    });
+    res.json(userGames.map(ug => ({
+      gameId: ug.gameId,
+      name: ug.name,
+      prize: ug.game.prize,
+      gameSize: ug.game.gameSize,
+      winnerId: ug.game.winnerId,
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching games' });
+  }
+});
+
+// Full game state + requesting player's card
+router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const userId = req.userDetails.userId;
+
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        createdBy: { select: { username: true } },
+        winner: { select: { username: true } },
+        registeredPlayers: { include: { user: { select: { username: true } } } },
+      },
+    });
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    const playerGameRecord = await prisma.playerGame.findUnique({
+      where: { playerId_gameId: { playerId: userId, gameId } },
+    });
+
+    res.json({
+      id: game.id,
+      name: game.name,
+      gameSize: game.gameSize,
+      prize: game.prize,
+      createdBy: game.createdBy.username,
+      winner: game.winner?.username ?? null,
+      players: game.registeredPlayers.map(rp => rp.user.username),
+      playerGame: playerGameRecord
+        ? {
+            id: playerGameRecord.id,
+            entries: JSON.parse(playerGameRecord.entries),
+            bingo: playerGameRecord.bingo,
+          }
+        : null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching game' });
+  }
+});
+
 // Delete a game — cascade in schema handles PlayerGame and UserGame cleanup
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
