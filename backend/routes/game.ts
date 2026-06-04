@@ -1,192 +1,136 @@
-import express, { Express, Request, Response, RequestHandler } from 'express';
-import { Types } from 'mongoose';
+import express, { Response } from 'express';
+import { prisma } from '../prisma/client';
+import { auth } from '../middlewares/authMiddleware';
+import { checkForBingo } from '../utils/bingoUtils';
+import { AuthRequest } from '../types';
 
-import User from '../models/User';
-import {Game, playerGame} from './../models/gameModels';
-// import { v4 as uuidv4 } from 'uuid';
-import {auth} from '../middlewares/authMiddleware'
-import {checkForBingo} from '../utils/bingoUtils'
-
-interface AuthRequest extends Request {
-  userDetails?:{
-    userId: string,
-    username: string;
-  }
-}
+type BingoEntry = { text: string; tick: boolean };
+type BingoGrid = BingoEntry[][];
 
 const router = express.Router();
 
-router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
-    console.log("Creating a New Game");
-    console.log(req.body);
-    if (req.userDetails) {
-        try {
-        const user = await User.findById(req.userDetails.userId).select('-password'); 
-        const { name, gameSize, prize } = req.body;
-        // console.log(gameSize);
-        console.log(name, user?.username);
-        const newGame = new Game({
-            name: name,
-            gameSize: gameSize,
-            createdBy: user,
-            registeredPlayers: [user],
-            prize: prize,
-        });
-        await newGame.save();
-        console.log(newGame);
-        const { playerEntries } = req.body;
-        console.log(playerEntries![0]);
-        const entries = playerEntries.map((row: any )=> 
-            row.map((text: String) => ({
-                text: text,
-                tick: false 
-            }))
-        );
-        console.log(entries![0]);
-        console.log("Created a game now attaching with the creator!! ");
-        console.log(user);
-        console.log("Player before : ", user);
-        user!.currentGames = user!.currentGames;
-        user!.currentGames.push({gameId : newGame._id, name: newGame.name});
-        user?.save();
-        console.log("Player After : ", user);
+// Create a new game and register the creator with their card in one transaction
+router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { name, gameSize, prize, playerEntries } = req.body;
+    const userId = req.userDetails.userId;
 
-        const newPlayerGame = new playerGame({
-            player: user,
-            game: newGame._id,
-            gameSize: newGame.gameSize,
-            entries: entries,
-        });
-        try {
-            await newPlayerGame.save();
-            res.json({message: "Game created successfully! ", gameId : newGame._id})
-        } catch (error) {
-            // Delete the created game in case not able to attach creator to it.
-            console.log(error);
-            await Game.findByIdAndDelete(newGame._id);
-            res.status(401).json({message: "Some unexpected error! "}).redirect('/login');
-        }
-    }catch (error) {
-        console.log(error);
-        res.status(401).json({message: "Some unexpected error! "}).redirect('/login');
-    }} else {
-        res.status(401).json({redirect : "login"});
-    }
-});
-  
-router.post('/register-for-game/:gameId', auth,  async (req : AuthRequest, res : Response) => {
-    // Handle the case when player is already registered for the game.
-    try {
-        console.log(" Here at the Patching factory to update BINGO! ")
-        const gameId = req.params.gameId;
-        const game = await Game.findById(gameId);
-        const {data} = req.body;
-        // const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
-        const entries = data.map((row: any )=>
-            row.map((text: String) => ({
-                text: text,
-                tick: false 
-            }))
-        );
-        const reqPlayerGame = new playerGame({
-            gameSize : game?.gameSize,
-            player : req.userDetails?.userId,
-            game : gameId,
-            entries : entries,
-        })
-        
-        reqPlayerGame?.save();
+    const entries: BingoGrid = playerEntries.map((row: string[]) =>
+      row.map((text: string) => ({ text, tick: false }))
+    );
 
-        const player = await User.findById(req.userDetails?.userId).select('-password');
-        
-        player?.currentGames.push(new Types.ObjectId(gameId));
-        player?.save();
+    const game = await prisma.game.create({
+      data: {
+        name,
+        gameSize,
+        prize,
+        createdById: userId,
+        registeredPlayers: { create: { userId, name } },
+        playerGames: {
+          create: { playerId: userId, gameSize, entries: JSON.stringify(entries) },
+        },
+      },
+    });
 
-        game?.registeredPlayers.push(player!._id)
-        game?.save();
-
-        console.log("Updated reqPlayerGame : ", reqPlayerGame)
-        res.json({message: "Registration Successful! "})
-    } catch (error) {
-        res.status(400).json({ error: 'Error registering for the Game' });
-    }
+    res.json({ message: 'Game created successfully!', gameId: game.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Error creating game' });
+  }
 });
 
-router.patch('/update-bingo/:gameId', auth, async (req : AuthRequest, res : Response) => {
-    try{
-        let reqPlayerGame = await playerGame.findOne({game : req.params.gameId});
-        let game = await Game.findById(reqPlayerGame!.game!._id);
-        
-        console.log("Checking if winner ", game?.name, game!.winner);
-        if(game!.winner)
-            return res.json({message: "Game is already finshed! ", winner: game});
-            
-        const gameSize = reqPlayerGame!.gameSize;
-        const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
+// Join an existing game with the player's own bingo card
+router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const userId = req.userDetails.userId;
+    const { data } = req.body;
 
-        const {updates} = req.body;
-        console.log(updates);
-        if(updates){
-        console.log("Inside update loop! ");
-            updates.forEach((entry: {rowIndex: number, colIndex: number, tick: any}) => {
-                console.log(" Entry : ", entry, typeof entry.rowIndex);
-                entries![entry.rowIndex][entry.colIndex].tick = entry.tick;
-            })
-        } 
-        
-        const bingo : number = checkForBingo(entries, gameSize);
-        reqPlayerGame!.bingo = bingo;
-        reqPlayerGame?.save();
-        console.log(gameSize, bingo);
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    if (!game) return res.status(404).json({ error: 'Game not found' });
 
-        if(reqPlayerGame!.bingo >= gameSize){
-            console.log(game)
-            console.log(req.userDetails?.userId)
-            if(game){
-                const winner = await User.findById(req.userDetails?.userId).select('-password');
-                console.log(" Found a Winner! ")
-                console.log(winner)
-                game!.winner = winner!._id;
-                game!.winnerAns = reqPlayerGame!._id;
-                await game.save();
-                console.log(game);
-                return res.json({redirect:"reload", message:" Hurray you won! ", winner: winner!.username});
-            }
-            // gameWon 
-        }
-        res.json({message: " At check for bingo ! ", bingo: bingo})
-    } catch (error) {
-        res.status(400).json({ error: 'Error marking as Completed!' });
+    const entries: BingoGrid = data.map((row: string[]) =>
+      row.map((text: string) => ({ text, tick: false }))
+    );
+
+    // Single transaction: create player card + register in game
+    await prisma.$transaction([
+      prisma.playerGame.create({
+        data: { playerId: userId, gameId, gameSize: game.gameSize, entries: JSON.stringify(entries) },
+      }),
+      prisma.userGame.create({
+        data: { userId, gameId, name: game.name },
+      }),
+    ]);
+
+    res.json({ message: 'Registration Successful!' });
+  } catch (error) {
+    res.status(400).json({ error: 'Error registering for the game' });
+  }
+});
+
+// Tick cells on a player's card and check for bingo
+// Bug fix: now scoped to the requesting user's card (was finding any player's card before)
+router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const userId = req.userDetails.userId;
+
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.winnerId) return res.json({ message: 'Game is already finished!', winner: game });
+
+    // Scoped to this player's card via composite unique key
+    const playerGameRecord = await prisma.playerGame.findUnique({
+      where: { playerId_gameId: { playerId: userId, gameId } },
+    });
+    if (!playerGameRecord) return res.status(404).json({ error: 'Player game not found' });
+
+    const entries: BingoGrid = JSON.parse(playerGameRecord.entries);
+    const { updates } = req.body;
+    if (updates) {
+      updates.forEach((entry: { rowIndex: number; colIndex: number; tick: boolean }) => {
+        entries[entry.rowIndex][entry.colIndex].tick = entry.tick;
+      });
     }
-})
 
+    const bingo = checkForBingo(entries, playerGameRecord.gameSize);
+
+    await prisma.playerGame.update({
+      where: { playerId_gameId: { playerId: userId, gameId } },
+      data: { entries: JSON.stringify(entries), bingo },
+    });
+
+    if (bingo >= playerGameRecord.gameSize) {
+      await prisma.game.update({
+        where: { id: gameId },
+        data: { winnerId: userId, winnerAnsId: playerGameRecord.id },
+      });
+      const winner = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true },
+      });
+      return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner?.username });
+    }
+
+    res.json({ message: 'Bingo check complete', bingo });
+  } catch (error) {
+    res.status(400).json({ error: 'Error marking as completed!' });
+  }
+});
+
+// Delete a game — cascade in schema handles PlayerGame and UserGame cleanup
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
-    try {
-        const game = await Game.findById(req.params.gameId);
-        console.log("HERE AT DETELE ROUTE: tbd : ", req.params.gameId, "game : ",game);
-        try{
-            await game!.deleteOne();
-        } catch (error) {
-            return res.status(400).json({error : "Game doesn't exist! "})
-        }
-        res.json({ message: "Game deleted successfully!" });
-    } catch (error) {
-        res.status(500).json({ error: 'Error deleting game!' });
-    }
-})
-
-router.delete('/dev/delete-all-currentGames', async (req: AuthRequest, res: Response) => {
-    console.log("DELETING all Current Games attached : ")
-    const users = await User.find();
-    for(const U of users){
-        const user = await User.findById(U).exec();
-        console.log(user);
-        user!.currentGames = [] as any;
-        await user!.save();
-        console.log(user?.currentGames);
-    }
-
-    return res.status(201).json({message: "successful"});
-})
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = parseInt(req.params.gameId);
+    await prisma.game.delete({ where: { id: gameId } });
+    res.json({ message: 'Game deleted successfully!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error deleting game!' });
+  }
+});
 
 export default router;

@@ -9,6 +9,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "middlewares/**/*"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*", "middlewares/**/*", "routes/**/*", "utils/**/*", "prisma/**/*", "types/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
