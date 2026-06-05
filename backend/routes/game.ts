@@ -164,9 +164,15 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
     });
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
-    const playerGameRecord = await prisma.playerGame.findUnique({
-      where: { playerId_gameId: { playerId: userId, gameId } },
-    });
+    const [playerGameRecord, otherPlayerGames] = await Promise.all([
+      prisma.playerGame.findUnique({
+        where: { playerId_gameId: { playerId: userId, gameId } },
+      }),
+      prisma.playerGame.findMany({
+        where: { gameId, NOT: { playerId: userId } },
+        include: { player: { select: { username: true } } },
+      }),
+    ]);
 
     res.json({
       id: game.id,
@@ -175,7 +181,7 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
       prize: game.prize,
       createdBy: game.createdBy.username,
       winner: game.winner?.username ?? null,
-      players: game.registeredPlayers.map(rp => rp.user.username),
+      players: otherPlayerGames.map(pg => ({ username: pg.player.username, bingo: pg.bingo })),
       playerGame: playerGameRecord
         ? {
             id: playerGameRecord.id,
@@ -186,6 +192,37 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching game' });
+  }
+});
+
+// Lazy-load a single player's card — only called when user clicks a player in the sidebar
+router.get('/:gameId/player-card/:username', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { gameId, username } = req.params;
+    const userId = req.userDetails.userId;
+
+    // Requester must be in this game
+    const requesterGame = await prisma.playerGame.findUnique({
+      where: { playerId_gameId: { playerId: userId, gameId } },
+    });
+    if (!requesterGame) return res.status(403).json({ error: 'Not in this game' });
+
+    const targetUser = await prisma.user.findUnique({ where: { username } });
+    if (!targetUser) return res.status(404).json({ error: 'Player not found' });
+
+    const targetGame = await prisma.playerGame.findUnique({
+      where: { playerId_gameId: { playerId: targetUser.id, gameId } },
+    });
+    if (!targetGame) return res.status(404).json({ error: 'Player not in this game' });
+
+    res.json({
+      username,
+      bingo: targetGame.bingo,
+      entries: JSON.parse(targetGame.entries),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching player card' });
   }
 });
 
