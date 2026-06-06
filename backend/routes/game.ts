@@ -1,192 +1,210 @@
-import express, { Express, Request, Response, RequestHandler } from 'express';
-import { Types } from 'mongoose';
+import express, { Response } from 'express';
+import { eq, and, ne } from 'drizzle-orm';
+import { db } from '../db';
+import { games, userGames, playerGames, users } from '../db/schema';
+import { auth } from '../middlewares/authMiddleware';
+import { checkForBingo } from '../utils/bingoUtils';
+import { AuthRequest } from '../types';
 
-import User from '../models/User';
-import {Game, playerGame} from './../models/gameModels';
-// import { v4 as uuidv4 } from 'uuid';
-import {auth} from '../middlewares/authMiddleware'
-import {checkForBingo} from '../utils/bingoUtils'
-
-interface AuthRequest extends Request {
-  userDetails?:{
-    userId: string,
-    username: string;
-  }
-}
+type BingoEntry = { text: string; tick: boolean };
 
 const router = express.Router();
 
-router.post('/create-game', auth, async (req: AuthRequest, res: Response) =>{
-    console.log("Creating a New Game");
-    console.log(req.body);
-    if (req.userDetails) {
-        try {
-        const user = await User.findById(req.userDetails.userId).select('-password'); 
-        const { name, gameSize, prize } = req.body;
-        // console.log(gameSize);
-        console.log(name, user?.username);
-        const newGame = new Game({
-            name: name,
-            gameSize: gameSize,
-            createdBy: user,
-            registeredPlayers: [user],
-            prize: prize,
-        });
-        await newGame.save();
-        console.log(newGame);
-        const { playerEntries } = req.body;
-        console.log(playerEntries![0]);
-        const entries = playerEntries.map((row: any )=> 
-            row.map((text: String) => ({
-                text: text,
-                tick: false 
-            }))
-        );
-        console.log(entries![0]);
-        console.log("Created a game now attaching with the creator!! ");
-        console.log(user);
-        console.log("Player before : ", user);
-        user!.currentGames = user!.currentGames;
-        user!.currentGames.push({gameId : newGame._id, name: newGame.name});
-        user?.save();
-        console.log("Player After : ", user);
+router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { name, gameSize, prize, playerEntries } = req.body;
+    const userId = req.userDetails.userId;
+    const gameId = crypto.randomUUID();
 
-        const newPlayerGame = new playerGame({
-            player: user,
-            game: newGame._id,
-            gameSize: newGame.gameSize,
-            entries: entries,
-        });
-        try {
-            await newPlayerGame.save();
-            res.json({message: "Game created successfully! ", gameId : newGame._id})
-        } catch (error) {
-            // Delete the created game in case not able to attach creator to it.
-            console.log(error);
-            await Game.findByIdAndDelete(newGame._id);
-            res.status(401).json({message: "Some unexpected error! "}).redirect('/login');
-        }
-    }catch (error) {
-        console.log(error);
-        res.status(401).json({message: "Some unexpected error! "}).redirect('/login');
-    }} else {
-        res.status(401).json({redirect : "login"});
-    }
-});
-  
-router.post('/register-for-game/:gameId', auth,  async (req : AuthRequest, res : Response) => {
-    // Handle the case when player is already registered for the game.
-    try {
-        console.log(" Here at the Patching factory to update BINGO! ")
-        const gameId = req.params.gameId;
-        const game = await Game.findById(gameId);
-        const {data} = req.body;
-        // const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
-        const entries = data.map((row: any )=>
-            row.map((text: String) => ({
-                text: text,
-                tick: false 
-            }))
-        );
-        const reqPlayerGame = new playerGame({
-            gameSize : game?.gameSize,
-            player : req.userDetails?.userId,
-            game : gameId,
-            entries : entries,
-        })
-        
-        reqPlayerGame?.save();
+    const entries: BingoEntry[][] = playerEntries.map((row: string[]) =>
+      row.map((text: string) => ({ text, tick: false }))
+    );
 
-        const player = await User.findById(req.userDetails?.userId).select('-password');
-        
-        player?.currentGames.push(new Types.ObjectId(gameId));
-        player?.save();
+    await db.transaction(async (tx) => {
+      await tx.insert(games).values({ id: gameId, name, gameSize, prize: prize || null, createdById: userId });
+      await tx.insert(userGames).values({ userId, gameId, name });
+      await tx.insert(playerGames).values({ playerId: userId, gameId, gameSize, entries: JSON.stringify(entries) });
+    });
 
-        game?.registeredPlayers.push(player!._id)
-        game?.save();
-
-        console.log("Updated reqPlayerGame : ", reqPlayerGame)
-        res.json({message: "Registration Successful! "})
-    } catch (error) {
-        res.status(400).json({ error: 'Error registering for the Game' });
-    }
+    res.json({ message: 'Game created successfully!', gameId });
+  } catch (error) {
+    res.status(500).json({ error: 'Error creating game' });
+  }
 });
 
-router.patch('/update-bingo/:gameId', auth, async (req : AuthRequest, res : Response) => {
-    try{
-        let reqPlayerGame = await playerGame.findOne({game : req.params.gameId});
-        let game = await Game.findById(reqPlayerGame!.game!._id);
-        
-        console.log("Checking if winner ", game?.name, game!.winner);
-        if(game!.winner)
-            return res.json({message: "Game is already finshed! ", winner: game});
-            
-        const gameSize = reqPlayerGame!.gameSize;
-        const entries: Array<Array<{ text: string; tick: boolean; }>> = reqPlayerGame!.entries as unknown as  Array<Array<{ text: string; tick: boolean; }>>;
+router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = req.params.gameId;
+    const userId = req.userDetails.userId;
+    const { data } = req.body;
 
-        const {updates} = req.body;
-        console.log(updates);
-        if(updates){
-        console.log("Inside update loop! ");
-            updates.forEach((entry: {rowIndex: number, colIndex: number, tick: any}) => {
-                console.log(" Entry : ", entry, typeof entry.rowIndex);
-                entries![entry.rowIndex][entry.colIndex].tick = entry.tick;
-            })
-        } 
-        
-        const bingo : number = checkForBingo(entries, gameSize);
-        reqPlayerGame!.bingo = bingo;
-        reqPlayerGame?.save();
-        console.log(gameSize, bingo);
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
 
-        if(reqPlayerGame!.bingo >= gameSize){
-            console.log(game)
-            console.log(req.userDetails?.userId)
-            if(game){
-                const winner = await User.findById(req.userDetails?.userId).select('-password');
-                console.log(" Found a Winner! ")
-                console.log(winner)
-                game!.winner = winner!._id;
-                game!.winnerAns = reqPlayerGame!._id;
-                await game.save();
-                console.log(game);
-                return res.json({redirect:"reload", message:" Hurray you won! ", winner: winner!.username});
-            }
-            // gameWon 
-        }
-        res.json({message: " At check for bingo ! ", bingo: bingo})
-    } catch (error) {
-        res.status(400).json({ error: 'Error marking as Completed!' });
+    const entries: BingoEntry[][] = data.map((row: string[]) =>
+      row.map((text: string) => ({ text, tick: false }))
+    );
+
+    await db.transaction(async (tx) => {
+      await tx.insert(playerGames).values({ playerId: userId, gameId, gameSize: game.gameSize, entries: JSON.stringify(entries) });
+      await tx.insert(userGames).values({ userId, gameId, name: game.name });
+    });
+
+    res.json({ message: 'Registration Successful!' });
+  } catch (error) {
+    res.status(400).json({ error: 'Error registering for the game' });
+  }
+});
+
+router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = req.params.gameId;
+    const userId = req.userDetails.userId;
+
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.winnerId) return res.json({ message: 'Game is already finished!', winner: game });
+
+    const [playerGameRecord] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+    if (!playerGameRecord) return res.status(404).json({ error: 'Player game not found' });
+
+    const entries: BingoEntry[][] = JSON.parse(playerGameRecord.entries);
+    const { updates } = req.body;
+    if (updates) {
+      updates.forEach((u: { rowIndex: number; colIndex: number; tick: boolean }) => {
+        entries[u.rowIndex][u.colIndex].tick = u.tick;
+      });
     }
-})
+
+    const bingo = checkForBingo(entries, playerGameRecord.gameSize);
+
+    await db.update(playerGames)
+      .set({ entries: JSON.stringify(entries), bingo })
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+
+    if (bingo >= playerGameRecord.gameSize) {
+      await db.update(games)
+        .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
+        .where(eq(games.id, gameId));
+
+      const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+      return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner.username });
+    }
+
+    res.json({ message: 'Bingo check complete', bingo });
+  } catch (error) {
+    res.status(400).json({ error: 'Error marking as completed!' });
+  }
+});
+
+router.get('/my-games', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const userId = req.userDetails.userId;
+
+    const rows = await db.select({
+      gameId:      userGames.gameId,
+      name:        userGames.name,
+      prize:       games.prize,
+      gameSize:    games.gameSize,
+      winnerId:    games.winnerId,
+      createdById: games.createdById,
+    }).from(userGames)
+      .innerJoin(games, eq(userGames.gameId, games.id))
+      .where(eq(userGames.userId, userId));
+
+    res.json(rows.map(r => ({
+      gameId:    r.gameId,
+      name:      r.name,
+      prize:     r.prize,
+      gameSize:  r.gameSize,
+      winnerId:  r.winnerId,
+      isCreator: r.createdById === userId,
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching games' });
+  }
+});
+
+router.get('/:gameId/player-card/:username', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { gameId, username } = req.params;
+    const userId = req.userDetails.userId;
+
+    const [requesterGame] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+    if (!requesterGame) return res.status(403).json({ error: 'Not in this game' });
+
+    const [targetUser] = await db.select().from(users).where(eq(users.username, username));
+    if (!targetUser) return res.status(404).json({ error: 'Player not found' });
+
+    const [targetGame] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, targetUser.id), eq(playerGames.gameId, gameId)));
+    if (!targetGame) return res.status(404).json({ error: 'Player not in this game' });
+
+    res.json({ username, bingo: targetGame.bingo, entries: JSON.parse(targetGame.entries) });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching player card' });
+  }
+});
+
+router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const gameId = req.params.gameId;
+    const userId = req.userDetails.userId;
+
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    const [creator] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.createdById));
+
+    let winnerUsername: string | null = null;
+    if (game.winnerId) {
+      const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.winnerId));
+      winnerUsername = winner?.username ?? null;
+    }
+
+    const [playerGameRecord] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+
+    const otherPlayers = await db.select({ username: users.username, bingo: playerGames.bingo })
+      .from(playerGames)
+      .innerJoin(users, eq(playerGames.playerId, users.id))
+      .where(and(eq(playerGames.gameId, gameId), ne(playerGames.playerId, userId)));
+
+    res.json({
+      id:        game.id,
+      name:      game.name,
+      gameSize:  game.gameSize,
+      prize:     game.prize,
+      createdBy: creator.username,
+      winner:    winnerUsername,
+      players:   otherPlayers,
+      playerGame: playerGameRecord ? {
+        id:      playerGameRecord.id,
+        entries: JSON.parse(playerGameRecord.entries),
+        bingo:   playerGameRecord.bingo,
+      } : null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching game' });
+  }
+});
 
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
-    try {
-        const game = await Game.findById(req.params.gameId);
-        console.log("HERE AT DETELE ROUTE: tbd : ", req.params.gameId, "game : ",game);
-        try{
-            await game!.deleteOne();
-        } catch (error) {
-            return res.status(400).json({error : "Game doesn't exist! "})
-        }
-        res.json({ message: "Game deleted successfully!" });
-    } catch (error) {
-        res.status(500).json({ error: 'Error deleting game!' });
-    }
-})
-
-router.delete('/dev/delete-all-currentGames', async (req: AuthRequest, res: Response) => {
-    console.log("DELETING all Current Games attached : ")
-    const users = await User.find();
-    for(const U of users){
-        const user = await User.findById(U).exec();
-        console.log(user);
-        user!.currentGames = [] as any;
-        await user!.save();
-        console.log(user?.currentGames);
-    }
-
-    return res.status(201).json({message: "successful"});
-})
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await db.delete(games).where(eq(games.id, req.params.gameId));
+    res.json({ message: 'Game deleted successfully!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error deleting game!' });
+  }
+});
 
 export default router;
