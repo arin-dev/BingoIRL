@@ -23,8 +23,8 @@ export default function BingoTable() {
 
   useEffect(() => {
     if (loading) { setLoading(false); return; }
-    if (!token) { window.location.href = '/signin'; }
-  }, [token, loading]);
+    if (!token) { router.push('/signin'); }
+  }, [token, loading, router]);
 
   useEffect(() => {
     setErrorMessage('');

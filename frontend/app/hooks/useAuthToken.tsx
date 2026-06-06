@@ -6,7 +6,16 @@ const useAuthToken = () => {
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     if (storedToken) {
-      setToken(storedToken);
+      try {
+        const payload = JSON.parse(atob(storedToken.split('.')[1]));
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          localStorage.removeItem('token');
+        } else {
+          setToken(storedToken);
+        }
+      } catch {
+        localStorage.removeItem('token');
+      }
     }
   }, []);
 
