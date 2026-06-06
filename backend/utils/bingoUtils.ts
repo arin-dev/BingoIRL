@@ -3,10 +3,7 @@ export function checkForBingo(matrix: Array<Array<{ text: string; tick: boolean 
 
     // Check rows
     for (let i = 0; i < gameSize; i++) {
-        if (matrix[i].every(entry => entry.tick)) {
-            bingo++;
-            console.log("Row ", i);
-        }
+        if (matrix[i].every(entry => entry.tick)) bingo++;
     }
     
     // Check columns
@@ -18,10 +15,7 @@ export function checkForBingo(matrix: Array<Array<{ text: string; tick: boolean 
                 break;
             }
         }
-        if (allTrue) {
-            console.log("Col", j);
-            bingo++;
-        }
+        if (allTrue) bingo++;
     }
     
     // Check major diagonal (left to right)
@@ -32,10 +26,7 @@ export function checkForBingo(matrix: Array<Array<{ text: string; tick: boolean 
             break;
         }
     }
-    if (diagonalTrue) {
-        console.log("Diag left");
-        bingo++;
-    }
+    if (diagonalTrue) bingo++;
     
     // Check anti-diagonal (right to left)
     let antiDiagonalTrue = true;
@@ -45,10 +36,7 @@ export function checkForBingo(matrix: Array<Array<{ text: string; tick: boolean 
             break;
         }
     }
-    if (antiDiagonalTrue) {
-        console.log("Diag Right");
-        bingo++;
-    }
+    if (antiDiagonalTrue) bingo++;
 
     return bingo;
 }
