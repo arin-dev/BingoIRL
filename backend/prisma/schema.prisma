@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  username     String       @unique
+  password     String
+  createdGames Game[]       @relation("GameCreatedBy")
+  wonGames     Game[]       @relation("GameWinner")
+  playerGames  PlayerGame[]
+  userGames    UserGame[]
+}
+
+model Game {
+  id                String       @id @default(uuid())
+  name              String
+  gameSize          Int          @default(3)
+  prize             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  createdBy         User         @relation("GameCreatedBy", fields: [createdById], references: [id])
+  createdById       Int
+  winner            User?        @relation("GameWinner", fields: [winnerId], references: [id])
+  winnerId          Int?
+  winnerAnsId       Int?
+  registeredPlayers UserGame[]
+  playerGames       PlayerGame[]
+}
+
+// Junction table: which users are in which games (replaces registeredPlayers array + currentGames array)
+model UserGame {
+  id     Int    @id @default(autoincrement())
+  user   User   @relation(fields: [userId], references: [id])
+  userId Int
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  gameId String
+  name   String // denormalized game name for display without a join
+
+  @@unique([userId, gameId])
+}
+
+// Each player's bingo card for a specific game
+model PlayerGame {
+  id       Int    @id @default(autoincrement())
+  player   User   @relation(fields: [playerId], references: [id])
+  playerId Int
+  game     Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  gameId   String
+  gameSize Int
+  entries  String // JSON-serialized Array<Array<{ text: string; tick: boolean }>>
+  bingo    Int    @default(0)
+
+  @@unique([playerId, gameId])
+}

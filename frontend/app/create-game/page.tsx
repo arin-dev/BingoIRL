@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '../components/header';
 import SubmitButton from '../components/button';
 import useAuthToken from '../hooks/useAuthToken';
@@ -10,6 +11,7 @@ import axios from 'axios';
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
 export default function BingoTable() {
+  const router = useRouter();
   const [size, setSize] = useState(3);
   const [table, setTable] = useState(Array(size).fill(null).map(() => Array(size).fill(null)));
   const [filled, setFilled] = useState(0);
@@ -128,7 +130,7 @@ export default function BingoTable() {
                         'Content-Type': 'application/json'
                       }
                     });
-                    alert(`Game Created: ${response.data.message}, Prize: ${response.data.gameId}`);
+                    router.push(`/game/${response.data.gameId}`);
                   } catch (error) {
                     setErrorMessage('Error creating game');
                   }

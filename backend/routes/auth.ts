@@ -1,60 +1,53 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import User from '../models/User';
+import { prisma } from '../prisma/client';
 
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
-  console.log("Here at Registration page. ");
   try {
     const { username, password } = req.body;
-    console.log(req.body);
-    const existingUser = await User.findOne({ username });
+    const existingUser = await prisma.user.findUnique({ where: { username } });
     if (existingUser) {
-      res.status(500).json({ error: 'User already exists. Please login or try a different username. ' });
+      return res.status(409).json({ error: 'User already exists. Please login or try a different username.' });
     }
-    else{
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const user = new User({ username, password: hashedPassword });
-      await user.save();
-      const token = jwt.sign(
-        { userId: user._id, username: user.username }, 
-        process.env.JWT_SECRET as string,
-        { expiresIn: '1d'}
-      );  
-      // res.status(201).json({ token, message: 'User created successfully' });
-      res.json({ token, username: user.username, currentGames: user.currentGames, message: 'User created successfully' });
-    }
-    } catch ( error) {
-    console.log("Printing error here :", error);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { username, password: hashedPassword },
+    });
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1d' }
+    );
+    res.json({ token, username: user.username, currentGames: [], message: 'User created successfully' });
+  } catch (error) {
     res.status(500).json({ error: 'Error registering user! Please try again' });
   }
 });
 
 router.post('/login', async (req, res) => {
-  console.log("Here at Login page. ");
   try {
     const { username, password } = req.body;
-    console.log(req.body);
-    const user = await User.findOne({ username });
+    const user = await prisma.user.findUnique({ where: { username } });
     if (!user) return res.status(400).json({ error: 'User not found' });
-    
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ error: 'Invalid password' });
-    const token = jwt.sign(
-      { userId: user._id, username: user.username }, 
-      process.env.JWT_SECRET as string,
-      { expiresIn: '1d'}
-    );
 
-    // console.log(" User ID : ", user.username);
-    // console.log(token);
-    // currentGames does not need to be confidential, sending it in the response instead
-    res.json({ token, username: user.username, currentGames: user.currentGames });
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1d' }
+    );
+    const currentGames = await prisma.userGame.findMany({
+      where: { userId: user.id },
+      select: { gameId: true, name: true },
+    });
+    res.json({ token, username: user.username, currentGames });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: 'Issues with the server please try again later!' });
+    res.status(500).json({ error: 'Issues with the server, please try again later!' });
   }
 });
 

@@ -1,34 +1,21 @@
-import express, { Express, Request, Response, RequestHandler } from 'express';
-import mongoose from 'mongoose';
+import express, { Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './../routes/auth';
 import gameRoutes from './../routes/game';
 import { auth } from './../middlewares/authMiddleware';
-import User from './../models/User';
-
-interface AuthRequest extends Request {
-  userDetails?:{
-    userId: string,
-    username: string;
-  }
-}
+import { prisma } from './../prisma/client';
+import { AuthRequest } from './../types';
 
 dotenv.config();
-const app: Express = express();
+const app = express();
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGODB_URI as string, {
-  serverSelectionTimeoutMS: 2000,
-})
-  .then(() => console.log('Connected to MongoDB'))
-  .catch((error) => console.error('MongoDB connection error:', error));
-
 app.use(cors({
-  origin: '*', // Allows requests from any origin
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'], // Allow specific HTTP methods
-  allowedHeaders: ['Content-Type', 'Authorization'], // Allow specific headers
-  credentials: true, // If credentials (like cookies) are needed
+  origin: process.env.ALLOWED_ORIGIN || '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 
 app.use(express.json());
@@ -37,18 +24,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 
 app.get('/api/protected', auth, async (req: AuthRequest, res: Response) => {
-  console.log("At Protected Path!")
-  if (req.userDetails) {
-    console.log(req.userDetails.username);
-    const user = await User.findById(req.userDetails.userId).select('-password'); 
-    if (user) {
-      res.json({ message: 'This is a protected route', user });
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
-  } else {
-    res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!req.userDetails) return res.status(401).json({ message: 'Unauthorized' });
+  const user = await prisma.user.findUnique({
+    where: { id: req.userDetails.userId },
+    select: { id: true, username: true },
+  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.json({ message: 'This is a protected route', user });
 });
 
 app.listen(PORT, () => {
