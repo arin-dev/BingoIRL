@@ -107,23 +107,31 @@ router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Respon
     }
 
     const bingo = checkForBingo(entries, playerGameRecord.gameSize);
+    const isWin = bingo >= playerGameRecord.gameSize;
 
-    await db.update(playerGames)
-      .set({ entries: JSON.stringify(entries), bingo })
-      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+    await db.transaction(async (tx) => {
+      await tx.update(playerGames)
+        .set({ entries: JSON.stringify(entries), bingo })
+        .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
 
-    if (bingo >= playerGameRecord.gameSize) {
-      await db.update(games)
-        .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
-        .where(eq(games.id, gameId));
+      if (isWin) {
+        await tx.update(games)
+          .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
+          .where(eq(games.id, gameId));
+      }
+    });
 
+    if (isWin) {
       const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
       return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner.username });
     }
 
     res.json({ message: 'Bingo check complete', bingo });
   } catch (error) {
-    res.status(400).json({ error: 'Error marking as completed!' });
+    if (error instanceof SyntaxError) {
+      return res.status(500).json({ error: 'Corrupt game data' });
+    }
+    res.status(500).json({ error: 'Error marking as completed!' });
   }
 });
 
@@ -189,6 +197,7 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
     const [creator] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.createdById));
+    if (!creator) return res.status(500).json({ error: 'Game creator not found' });
 
     let winnerUsername: string | null = null;
     if (game.winnerId) {
@@ -226,6 +235,9 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
+    const [game] = await db.select({ createdById: games.createdById }).from(games).where(eq(games.id, req.params.gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.createdById !== req.userDetails.userId) return res.status(403).json({ error: 'Not authorized' });
     await db.delete(games).where(eq(games.id, req.params.gameId));
     res.json({ message: 'Game deleted successfully!' });
   } catch (error) {
