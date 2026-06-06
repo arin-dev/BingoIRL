@@ -28,6 +28,7 @@ export default function HomePage() {
   const [joinId, setJoinId] = useState('');
   const [joinLoading, setJoinLoading] = useState(false);
 
+  // Hydration guard: localStorage isn't available on first SSR pass
   useEffect(() => {
     if (authLoading) { setAuthLoading(false); return; }
     if (!token) router.push('/signin');

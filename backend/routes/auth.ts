@@ -8,7 +8,6 @@ import { users, userGames } from '../db/schema';
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
-  console.log("Here at Registration page. ");
   try {
     const { username, password } = req.body;
 
@@ -34,19 +33,19 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  console.log("Here at Login page. ");
   try {
     const { username, password } = req.body;
 
     const [user] = await db.select().from(users).where(eq(users.username, username));
     if (!user) return res.status(400).json({ error: 'User not found' });
-    
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ error: 'Invalid password' });
+
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1d'}
+      { expiresIn: '1d' }
     );
 
     const currentGames = await db
@@ -56,8 +55,7 @@ router.post('/login', async (req, res) => {
 
     res.json({ token, username: user.username, currentGames });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: 'Issues with the server please try again later!' });
+    res.status(500).json({ error: 'Issues with the server, please try again later!' });
   }
 });
 
