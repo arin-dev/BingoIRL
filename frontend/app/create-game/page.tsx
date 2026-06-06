@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../components/header';
 import SubmitButton from '../components/button';
 import useAuthToken from '../hooks/useAuthToken';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 

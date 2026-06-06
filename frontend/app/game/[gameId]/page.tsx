@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import Header from '../../components/header';
 import BingoGrid from '../../components/BingoGrid';
 import useAuthToken from '../../hooks/useAuthToken';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
