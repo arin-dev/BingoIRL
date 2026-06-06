@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Header from '../../components/header';
 import BingoGrid from '../../components/BingoGrid';
 import useAuthToken from '../../hooks/useAuthToken';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
@@ -44,7 +44,6 @@ export default function GamePage() {
   const [submitting, setSubmitting] = useState(false);
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
   const [cardLoading, setCardLoading] = useState(false);
-  const cardCache = useRef<Map<string, CardData>>(new Map());
 
   const gameId = params.gameId as string;
 
@@ -136,8 +135,6 @@ export default function GamePage() {
   };
 
   const handleViewCard = async (username: string) => {
-    const cached = cardCache.current.get(username);
-    if (cached) { setViewingCard(cached); return; }
     setCardLoading(true);
     setViewingCard({ username, bingo: 0, entries: [] });
     try {
@@ -145,9 +142,7 @@ export default function GamePage() {
         `${BASE_URL}api/game/${gameId}/player-card/${username}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data: CardData = res.data;
-      cardCache.current.set(username, data);
-      setViewingCard(data);
+      setViewingCard(res.data);
     } catch {
       toast.error('Could not load card.');
       setViewingCard(null);

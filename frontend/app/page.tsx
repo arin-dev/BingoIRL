@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Header from './components/header';
 import useAuthToken from './hooks/useAuthToken';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 

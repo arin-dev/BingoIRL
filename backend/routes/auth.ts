@@ -1,15 +1,28 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { users, userGames } from '../db/schema';
 
+const registerSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(6).max(100),
+});
+
+const loginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   try {
-    const { username, password } = req.body;
+    const { username, password } = parsed.data;
 
     const [existing] = await db.select().from(users).where(eq(users.username, username));
     if (existing) {
@@ -33,8 +46,10 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   try {
-    const { username, password } = req.body;
+    const { username, password } = parsed.data;
 
     const [user] = await db.select().from(users).where(eq(users.username, username));
     if (!user) return res.status(400).json({ error: 'User not found' });

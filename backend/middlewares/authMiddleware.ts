@@ -6,7 +6,7 @@ export const auth = (req: AuthRequest, res: Response, next: NextFunction) => {
   const jwtToken = req.header('Authorization');
 
   if (!jwtToken || !jwtToken.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Access denied' });
+    return res.status(401).json({ error: 'Requires Authorization' });
   }
 
   const token = jwtToken.replace('Bearer ', '');

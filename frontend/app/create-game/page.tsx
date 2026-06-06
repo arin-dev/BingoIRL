@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../components/header';
 import SubmitButton from '../components/button';
 import useAuthToken from '../hooks/useAuthToken';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_PRODUCTION_DOMAIN;
 
@@ -23,8 +23,8 @@ export default function BingoTable() {
 
   useEffect(() => {
     if (loading) { setLoading(false); return; }
-    if (!token) { window.location.href = '/signin'; }
-  }, [token, loading]);
+    if (!token) { router.push('/signin'); }
+  }, [token, loading, router]);
 
   useEffect(() => {
     setErrorMessage('');

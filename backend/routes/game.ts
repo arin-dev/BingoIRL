@@ -1,4 +1,5 @@
 import express, { Response } from 'express';
+import { z } from 'zod';
 import { eq, and, ne } from 'drizzle-orm';
 import { db } from '../db';
 import { games, userGames, playerGames, users } from '../db/schema';
@@ -8,12 +9,35 @@ import { AuthRequest } from '../types';
 
 type BingoEntry = { text: string; tick: boolean };
 
+const entryCell = z.string().min(1).max(100);
+
+const createGameSchema = z.object({
+  name: z.string().min(1).max(100),
+  gameSize: z.number().int().min(2).max(5),
+  prize: z.string().max(100).optional(),
+  playerEntries: z.array(z.array(entryCell)),
+});
+
+const registerForGameSchema = z.object({
+  data: z.array(z.array(entryCell)),
+});
+
+const updateBingoSchema = z.object({
+  updates: z.array(z.object({
+    rowIndex: z.number().int().min(0),
+    colIndex: z.number().int().min(0),
+    tick: z.boolean(),
+  })).optional(),
+});
+
 const router = express.Router();
 
 router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  const parsed = createGameSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   try {
-    const { name, gameSize, prize, playerEntries } = req.body;
+    const { name, gameSize, prize, playerEntries } = parsed.data;
     const userId = req.userDetails.userId;
     const gameId = crypto.randomUUID();
 
@@ -35,10 +59,12 @@ router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
 
 router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  const parsed = registerForGameSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   try {
     const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
-    const { data } = req.body;
+    const { data } = parsed.data;
 
     const [game] = await db.select().from(games).where(eq(games.id, gameId));
     if (!game) return res.status(404).json({ error: 'Game not found' });
@@ -60,6 +86,8 @@ router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Re
 
 router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  const parsed = updateBingoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   try {
     const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
@@ -73,31 +101,37 @@ router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Respon
     if (!playerGameRecord) return res.status(404).json({ error: 'Player game not found' });
 
     const entries: BingoEntry[][] = JSON.parse(playerGameRecord.entries);
-    const { updates } = req.body;
+    const { updates } = parsed.data;
     if (updates) {
-      updates.forEach((u: { rowIndex: number; colIndex: number; tick: boolean }) => {
-        entries[u.rowIndex][u.colIndex].tick = u.tick;
-      });
+      updates.forEach(u => { entries[u.rowIndex][u.colIndex].tick = u.tick; });
     }
 
     const bingo = checkForBingo(entries, playerGameRecord.gameSize);
+    const isWin = bingo >= playerGameRecord.gameSize;
 
-    await db.update(playerGames)
-      .set({ entries: JSON.stringify(entries), bingo })
-      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+    await db.transaction(async (tx) => {
+      await tx.update(playerGames)
+        .set({ entries: JSON.stringify(entries), bingo })
+        .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
 
-    if (bingo >= playerGameRecord.gameSize) {
-      await db.update(games)
-        .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
-        .where(eq(games.id, gameId));
+      if (isWin) {
+        await tx.update(games)
+          .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
+          .where(eq(games.id, gameId));
+      }
+    });
 
+    if (isWin) {
       const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
       return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner.username });
     }
 
     res.json({ message: 'Bingo check complete', bingo });
   } catch (error) {
-    res.status(400).json({ error: 'Error marking as completed!' });
+    if (error instanceof SyntaxError) {
+      return res.status(500).json({ error: 'Corrupt game data' });
+    }
+    res.status(500).json({ error: 'Error marking as completed!' });
   }
 });
 
@@ -163,6 +197,7 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
     const [creator] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.createdById));
+    if (!creator) return res.status(500).json({ error: 'Game creator not found' });
 
     let winnerUsername: string | null = null;
     if (game.winnerId) {
@@ -200,6 +235,9 @@ router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
 router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
+    const [game] = await db.select({ createdById: games.createdById }).from(games).where(eq(games.id, req.params.gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.createdById !== req.userDetails.userId) return res.status(403).json({ error: 'Not authorized' });
     await db.delete(games).where(eq(games.id, req.params.gameId));
     res.json({ message: 'Game deleted successfully!' });
   } catch (error) {
