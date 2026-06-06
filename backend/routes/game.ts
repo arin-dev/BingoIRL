@@ -1,45 +1,38 @@
 import express, { Response } from 'express';
-import { prisma } from '../prisma/client';
+import { eq, and, ne } from 'drizzle-orm';
+import { db } from '../db';
+import { games, userGames, playerGames, users } from '../db/schema';
 import { auth } from '../middlewares/authMiddleware';
 import { checkForBingo } from '../utils/bingoUtils';
 import { AuthRequest } from '../types';
 
 type BingoEntry = { text: string; tick: boolean };
-type BingoGrid = BingoEntry[][];
 
 const router = express.Router();
 
-// Create a new game and register the creator with their card in one transaction
 router.post('/create-game', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const { name, gameSize, prize, playerEntries } = req.body;
     const userId = req.userDetails.userId;
+    const gameId = crypto.randomUUID();
 
-    const entries: BingoGrid = playerEntries.map((row: string[]) =>
+    const entries: BingoEntry[][] = playerEntries.map((row: string[]) =>
       row.map((text: string) => ({ text, tick: false }))
     );
 
-    const game = await prisma.game.create({
-      data: {
-        name,
-        gameSize,
-        prize,
-        createdById: userId,
-        registeredPlayers: { create: { userId, name } },
-        playerGames: {
-          create: { playerId: userId, gameSize, entries: JSON.stringify(entries) },
-        },
-      },
+    await db.transaction(async (tx) => {
+      await tx.insert(games).values({ id: gameId, name, gameSize, prize: prize || null, createdById: userId });
+      await tx.insert(userGames).values({ userId, gameId, name });
+      await tx.insert(playerGames).values({ playerId: userId, gameId, gameSize, entries: JSON.stringify(entries) });
     });
 
-    res.json({ message: 'Game created successfully!', gameId: game.id });
+    res.json({ message: 'Game created successfully!', gameId });
   } catch (error) {
     res.status(500).json({ error: 'Error creating game' });
   }
 });
 
-// Join an existing game with the player's own bingo card
 router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
@@ -47,22 +40,17 @@ router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Re
     const userId = req.userDetails.userId;
     const { data } = req.body;
 
-    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
-    const entries: BingoGrid = data.map((row: string[]) =>
+    const entries: BingoEntry[][] = data.map((row: string[]) =>
       row.map((text: string) => ({ text, tick: false }))
     );
 
-    // Single transaction: create player card + register in game
-    await prisma.$transaction([
-      prisma.playerGame.create({
-        data: { playerId: userId, gameId, gameSize: game.gameSize, entries: JSON.stringify(entries) },
-      }),
-      prisma.userGame.create({
-        data: { userId, gameId, name: game.name },
-      }),
-    ]);
+    await db.transaction(async (tx) => {
+      await tx.insert(playerGames).values({ playerId: userId, gameId, gameSize: game.gameSize, entries: JSON.stringify(entries) });
+      await tx.insert(userGames).values({ userId, gameId, name: game.name });
+    });
 
     res.json({ message: 'Registration Successful!' });
   } catch (error) {
@@ -70,49 +58,41 @@ router.post('/register-for-game/:gameId', auth, async (req: AuthRequest, res: Re
   }
 });
 
-// Tick cells on a player's card and check for bingo
-// Bug fix: now scoped to the requesting user's card (was finding any player's card before)
 router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const gameId = req.params.gameId;
     const userId = req.userDetails.userId;
 
-    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
     if (!game) return res.status(404).json({ error: 'Game not found' });
     if (game.winnerId) return res.json({ message: 'Game is already finished!', winner: game });
 
-    // Scoped to this player's card via composite unique key
-    const playerGameRecord = await prisma.playerGame.findUnique({
-      where: { playerId_gameId: { playerId: userId, gameId } },
-    });
+    const [playerGameRecord] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
     if (!playerGameRecord) return res.status(404).json({ error: 'Player game not found' });
 
-    const entries: BingoGrid = JSON.parse(playerGameRecord.entries);
+    const entries: BingoEntry[][] = JSON.parse(playerGameRecord.entries);
     const { updates } = req.body;
     if (updates) {
-      updates.forEach((entry: { rowIndex: number; colIndex: number; tick: boolean }) => {
-        entries[entry.rowIndex][entry.colIndex].tick = entry.tick;
+      updates.forEach((u: { rowIndex: number; colIndex: number; tick: boolean }) => {
+        entries[u.rowIndex][u.colIndex].tick = u.tick;
       });
     }
 
     const bingo = checkForBingo(entries, playerGameRecord.gameSize);
 
-    await prisma.playerGame.update({
-      where: { playerId_gameId: { playerId: userId, gameId } },
-      data: { entries: JSON.stringify(entries), bingo },
-    });
+    await db.update(playerGames)
+      .set({ entries: JSON.stringify(entries), bingo })
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
 
     if (bingo >= playerGameRecord.gameSize) {
-      await prisma.game.update({
-        where: { id: gameId },
-        data: { winnerId: userId, winnerAnsId: playerGameRecord.id },
-      });
-      const winner = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { username: true },
-      });
-      return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner?.username });
+      await db.update(games)
+        .set({ winnerId: userId, winnerAnsId: playerGameRecord.id })
+        .where(eq(games.id, gameId));
+
+      const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+      return res.json({ redirect: 'reload', message: 'Hurray you won!', winner: winner.username });
     }
 
     res.json({ message: 'Bingo check complete', bingo });
@@ -121,117 +101,106 @@ router.patch('/update-bingo/:gameId', auth, async (req: AuthRequest, res: Respon
   }
 });
 
-// All games the current user is registered in
 router.get('/my-games', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const userGames = await prisma.userGame.findMany({
-      where: { userId: req.userDetails.userId },
-      include: {
-        game: {
-          select: { id: true, name: true, prize: true, gameSize: true, winnerId: true, createdById: true },
-        },
-      },
-    });
     const userId = req.userDetails.userId;
-    res.json(userGames.map(ug => ({
-      gameId: ug.gameId,
-      name: ug.name,
-      prize: ug.game.prize,
-      gameSize: ug.game.gameSize,
-      winnerId: ug.game.winnerId,
-      isCreator: ug.game.createdById === userId,
+
+    const rows = await db.select({
+      gameId:      userGames.gameId,
+      name:        userGames.name,
+      prize:       games.prize,
+      gameSize:    games.gameSize,
+      winnerId:    games.winnerId,
+      createdById: games.createdById,
+    }).from(userGames)
+      .innerJoin(games, eq(userGames.gameId, games.id))
+      .where(eq(userGames.userId, userId));
+
+    res.json(rows.map(r => ({
+      gameId:    r.gameId,
+      name:      r.name,
+      prize:     r.prize,
+      gameSize:  r.gameSize,
+      winnerId:  r.winnerId,
+      isCreator: r.createdById === userId,
     })));
   } catch (error) {
     res.status(500).json({ error: 'Error fetching games' });
   }
 });
 
-// Full game state + requesting player's card
-router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
-  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const gameId = req.params.gameId;
-    const userId = req.userDetails.userId;
-
-    const game = await prisma.game.findUnique({
-      where: { id: gameId },
-      include: {
-        createdBy: { select: { username: true } },
-        winner: { select: { username: true } },
-        registeredPlayers: { include: { user: { select: { username: true } } } },
-      },
-    });
-    if (!game) return res.status(404).json({ error: 'Game not found' });
-
-    const [playerGameRecord, otherPlayerGames] = await Promise.all([
-      prisma.playerGame.findUnique({
-        where: { playerId_gameId: { playerId: userId, gameId } },
-      }),
-      prisma.playerGame.findMany({
-        where: { gameId, NOT: { playerId: userId } },
-        include: { player: { select: { username: true } } },
-      }),
-    ]);
-
-    res.json({
-      id: game.id,
-      name: game.name,
-      gameSize: game.gameSize,
-      prize: game.prize,
-      createdBy: game.createdBy.username,
-      winner: game.winner?.username ?? null,
-      players: otherPlayerGames.map(pg => ({ username: pg.player.username, bingo: pg.bingo })),
-      playerGame: playerGameRecord
-        ? {
-            id: playerGameRecord.id,
-            entries: JSON.parse(playerGameRecord.entries),
-            bingo: playerGameRecord.bingo,
-          }
-        : null,
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Error fetching game' });
-  }
-});
-
-// Lazy-load a single player's card — only called when user clicks a player in the sidebar
 router.get('/:gameId/player-card/:username', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const { gameId, username } = req.params;
     const userId = req.userDetails.userId;
 
-    // Requester must be in this game
-    const requesterGame = await prisma.playerGame.findUnique({
-      where: { playerId_gameId: { playerId: userId, gameId } },
-    });
+    const [requesterGame] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
     if (!requesterGame) return res.status(403).json({ error: 'Not in this game' });
 
-    const targetUser = await prisma.user.findUnique({ where: { username } });
+    const [targetUser] = await db.select().from(users).where(eq(users.username, username));
     if (!targetUser) return res.status(404).json({ error: 'Player not found' });
 
-    const targetGame = await prisma.playerGame.findUnique({
-      where: { playerId_gameId: { playerId: targetUser.id, gameId } },
-    });
+    const [targetGame] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, targetUser.id), eq(playerGames.gameId, gameId)));
     if (!targetGame) return res.status(404).json({ error: 'Player not in this game' });
 
-    res.json({
-      username,
-      bingo: targetGame.bingo,
-      entries: JSON.parse(targetGame.entries),
-    });
+    res.json({ username, bingo: targetGame.bingo, entries: JSON.parse(targetGame.entries) });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching player card' });
   }
 });
 
-// Delete a game — cascade in schema handles PlayerGame and UserGame cleanup
-router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
+router.get('/:gameId', auth, async (req: AuthRequest, res: Response) => {
   if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const gameId = req.params.gameId;
-    await prisma.game.delete({ where: { id: gameId } });
+    const userId = req.userDetails.userId;
+
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+
+    const [creator] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.createdById));
+
+    let winnerUsername: string | null = null;
+    if (game.winnerId) {
+      const [winner] = await db.select({ username: users.username }).from(users).where(eq(users.id, game.winnerId));
+      winnerUsername = winner?.username ?? null;
+    }
+
+    const [playerGameRecord] = await db.select().from(playerGames)
+      .where(and(eq(playerGames.playerId, userId), eq(playerGames.gameId, gameId)));
+
+    const otherPlayers = await db.select({ username: users.username, bingo: playerGames.bingo })
+      .from(playerGames)
+      .innerJoin(users, eq(playerGames.playerId, users.id))
+      .where(and(eq(playerGames.gameId, gameId), ne(playerGames.playerId, userId)));
+
+    res.json({
+      id:        game.id,
+      name:      game.name,
+      gameSize:  game.gameSize,
+      prize:     game.prize,
+      createdBy: creator.username,
+      winner:    winnerUsername,
+      players:   otherPlayers,
+      playerGame: playerGameRecord ? {
+        id:      playerGameRecord.id,
+        entries: JSON.parse(playerGameRecord.entries),
+        bingo:   playerGameRecord.bingo,
+      } : null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching game' });
+  }
+});
+
+router.delete('/delete-game/:gameId', auth, async (req: AuthRequest, res: Response) => {
+  if (!req.userDetails) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await db.delete(games).where(eq(games.id, req.params.gameId));
     res.json({ message: 'Game deleted successfully!' });
   } catch (error) {
     res.status(500).json({ error: 'Error deleting game!' });

@@ -34,7 +34,6 @@ export default function HomePage() {
     if (!token) router.push('/signin');
   }, [token, authLoading, router]);
 
-  // Fetch user's games once token is available
   useEffect(() => {
     if (!token) return;
     axios
@@ -46,7 +45,7 @@ export default function HomePage() {
   if (!token) return null;
 
   const handleDelete = async (gameId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // don't navigate into the game
+    e.stopPropagation();
     if (!confirm('Delete this game? This cannot be undone.')) return;
     try {
       await axios.delete(`${BASE_URL}api/game/delete-game/${gameId}`, {
@@ -92,7 +91,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Join an existing game by ID */}
         <div className="flex gap-2 mb-6">
           <input
             className="border border-gray-300 rounded px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -110,7 +108,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Game list */}
         {games.length === 0 ? (
           <p className="text-gray-400 text-center py-16">
             No games yet. Create one or join with an ID!
@@ -131,11 +128,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      g.winnerId ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                    }`}
-                  >
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${g.winnerId ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                     {g.winnerId ? 'Finished' : 'In Progress'}
                   </span>
                   {g.isCreator && (

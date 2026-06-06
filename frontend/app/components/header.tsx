@@ -14,7 +14,6 @@ const Header: React.FC<{ currentPage: string }> = ({ currentPage = "BingoIRL" })
   const [infoIsActive, setInfoIsActive] = useState(false);
   const [username, setUsername] = useState('');
 
-  // Read from localStorage only on client to avoid SSR hydration mismatch
   useEffect(() => {
     setUsername(localStorage.getItem('username') || '');
   }, []);
@@ -42,12 +41,10 @@ const Header: React.FC<{ currentPage: string }> = ({ currentPage = "BingoIRL" })
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* Avatar — shows first letter of username */}
           <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-lg font-bold text-gray-700">
             {username ? username[0].toUpperCase() : '?'}
           </div>
 
-          {/* Info button */}
           <button
             onClick={() => setInfoIsActive(prev => !prev)}
             className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-lg font-bold text-blue-500"
@@ -55,7 +52,6 @@ const Header: React.FC<{ currentPage: string }> = ({ currentPage = "BingoIRL" })
             i
           </button>
 
-          {/* Info overlay */}
           {infoIsActive && (
             <div
               onClick={() => setInfoIsActive(false)}

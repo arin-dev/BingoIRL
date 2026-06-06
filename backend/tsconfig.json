@@ -9,6 +9,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "middlewares/**/*", "routes/**/*", "utils/**/*", "prisma/**/*", "types/**/*"],
+  "include": ["src/**/*", "middlewares/**/*", "routes/**/*", "utils/**/*", "db/**/*", "types/**/*", "drizzle.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
